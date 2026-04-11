@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
+import { webcrypto } from "node:crypto";
 import { verifyWebhookSignature } from "../src/index.js";
+
+const subtle = webcrypto.subtle;
 
 describe("verifyWebhookSignature", () => {
   it("returns true for valid signature", async () => {
@@ -8,14 +11,14 @@ describe("verifyWebhookSignature", () => {
 
     // Compute expected signature
     const encoder = new TextEncoder();
-    const key = await crypto.subtle.importKey(
+    const key = await subtle.importKey(
       "raw",
       encoder.encode(secret),
       { name: "HMAC", hash: "SHA-256" },
       false,
       ["sign"],
     );
-    const sig = await crypto.subtle.sign("HMAC", key, encoder.encode(payload));
+    const sig = await subtle.sign("HMAC", key, encoder.encode(payload));
     const signature = Array.from(new Uint8Array(sig))
       .map((b) => b.toString(16).padStart(2, "0"))
       .join("");
