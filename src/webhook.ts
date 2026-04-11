@@ -1,5 +1,10 @@
 import type { VerifyWebhookOptions } from "./types/index.js";
 
+// Node.js <20 may not have crypto on globalThis; pull from node:crypto
+const subtle: SubtleCrypto =
+  globalThis.crypto?.subtle ??
+  (await import("node:crypto")).webcrypto.subtle as unknown as SubtleCrypto;
+
 /**
  * Verify the signature of a UniPost webhook request.
  *
@@ -9,7 +14,7 @@ export async function verifyWebhookSignature(options: VerifyWebhookOptions): Pro
   const { payload, signature, secret } = options;
 
   const encoder = new TextEncoder();
-  const key = await crypto.subtle.importKey(
+  const key = await subtle.importKey(
     "raw",
     encoder.encode(secret),
     { name: "HMAC", hash: "SHA-256" },
@@ -18,7 +23,7 @@ export async function verifyWebhookSignature(options: VerifyWebhookOptions): Pro
   );
 
   const payloadBytes = typeof payload === "string" ? encoder.encode(payload) : new Uint8Array(payload);
-  const signatureBytes = await crypto.subtle.sign("HMAC", key, payloadBytes);
+  const signatureBytes = await subtle.sign("HMAC", key, payloadBytes);
   const computed = bufferToHex(signatureBytes);
 
   return timingSafeEqual(computed, signature);
