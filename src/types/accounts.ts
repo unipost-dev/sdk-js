@@ -12,6 +12,7 @@ export type ConnectionType = "byo" | "managed";
 
 export interface SocialAccount {
   id: string;
+  profile_id: string;
   platform: Platform;
   account_name: string | null;
   external_user_id?: string;
@@ -30,6 +31,7 @@ export interface AccountHealth {
 
 export interface ListAccountsParams {
   platform?: Platform;
+  profileId?: string;
   externalUserId?: string;
   status?: AccountStatus;
 }

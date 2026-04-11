@@ -8,6 +8,7 @@ export class Accounts {
   async list(params?: ListAccountsParams): Promise<PaginatedResponse<SocialAccount>> {
     const query: Record<string, string | undefined> = {};
     if (params?.platform) query.platform = params.platform;
+    if (params?.profileId) query.profile_id = params.profileId;
     if (params?.externalUserId) query.external_user_id = params.externalUserId;
     if (params?.status) query.status = params.status;
     return this.http.get("/v1/social-accounts", query);

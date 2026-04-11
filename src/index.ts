@@ -36,6 +36,8 @@ export type {
   WebhookEventType,
   WebhookEvent,
   VerifyWebhookOptions,
+  // Profiles
+  Profile,
   // Connect
   ConnectSession,
   CreateConnectSessionParams,

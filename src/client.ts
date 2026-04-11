@@ -5,6 +5,7 @@ import { Media } from "./resources/media.js";
 import { Analytics } from "./resources/analytics.js";
 import { Connect } from "./resources/connect.js";
 import { Users } from "./resources/users.js";
+import { Profiles } from "./resources/profiles.js";
 import type { UniPostClientOptions } from "./types/index.js";
 
 const DEFAULT_BASE_URL = "https://api.unipost.dev";
@@ -28,6 +29,7 @@ const DEFAULT_TIMEOUT = 30_000;
 export class UniPost {
   readonly accounts: Accounts;
   readonly posts: Posts;
+  readonly profiles: Profiles;
   readonly media: Media;
   readonly analytics: Analytics;
   readonly connect: Connect;
@@ -49,6 +51,7 @@ export class UniPost {
 
     this.accounts = new Accounts(http);
     this.posts = new Posts(http);
+    this.profiles = new Profiles(http);
     this.media = new Media(http);
     this.analytics = new Analytics(http);
     this.connect = new Connect(http);
