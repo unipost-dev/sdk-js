@@ -1,9 +1,11 @@
 import type { VerifyWebhookOptions } from "./types/index.js";
 
-// Node.js <20 may not have crypto on globalThis; pull from node:crypto
-const subtle: SubtleCrypto =
-  globalThis.crypto?.subtle ??
-  (await import("node:crypto")).webcrypto.subtle as unknown as SubtleCrypto;
+function getSubtle(): SubtleCrypto {
+  if (globalThis.crypto?.subtle) return globalThis.crypto.subtle;
+  // Node.js <20 fallback
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  return require("node:crypto").webcrypto.subtle;
+}
 
 /**
  * Verify the signature of a UniPost webhook request.
@@ -12,6 +14,7 @@ const subtle: SubtleCrypto =
  */
 export async function verifyWebhookSignature(options: VerifyWebhookOptions): Promise<boolean> {
   const { payload, signature, secret } = options;
+  const subtle = getSubtle();
 
   const encoder = new TextEncoder();
   const key = await subtle.importKey(
