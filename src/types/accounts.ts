@@ -13,6 +13,7 @@ export type ConnectionType = "byo" | "managed";
 export interface SocialAccount {
   id: string;
   profile_id: string;
+  profile_name: string;
   platform: Platform;
   account_name: string | null;
   external_user_id?: string;
