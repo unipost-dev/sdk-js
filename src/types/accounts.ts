@@ -5,34 +5,44 @@ export type Platform =
   | "threads"
   | "tiktok"
   | "youtube"
-  | "bluesky";
+  | "bluesky"
+  | "facebook"
+  | "pinterest"
+  | string;
 
-export type AccountStatus = "active" | "reconnect_required" | "disconnected";
-export type ConnectionType = "byo" | "managed";
+export type AccountStatus = "active" | "reconnect_required" | "disconnected" | string;
+export type ConnectionType = "byo" | "managed" | string;
 
 export interface SocialAccount {
   id: string;
-  profile_id: string;
-  profile_name: string;
+  profile_id?: string;
+  profile_name?: string;
   platform: Platform;
-  account_name: string | null;
+  account_name?: string | null;
   external_user_id?: string;
   external_user_email?: string;
-  connected_at: string;
   status: AccountStatus;
-  connection_type: ConnectionType;
+  connection_type?: ConnectionType;
 }
 
 export interface AccountHealth {
-  account_id: string;
-  status: "ok" | "degraded" | "disconnected";
-  last_checked_at: string;
-  error?: string;
+  social_account_id: string;
+  platform: Platform;
+  status: "ok" | "degraded" | "disconnected" | string;
+  last_successful_post_at?: string;
+  token_expires_at?: string;
+  last_error?: Record<string, unknown>;
 }
 
 export interface ListAccountsParams {
   platform?: Platform;
-  profileId?: string;
   externalUserId?: string;
   status?: AccountStatus;
+  profileId?: string;
+}
+
+export interface ConnectAccountParams {
+  profileId?: string;
+  platform: Platform;
+  credentials: Record<string, string>;
 }

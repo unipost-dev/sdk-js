@@ -70,12 +70,23 @@ export class QuotaError extends UniPostError {
   }
 }
 
+interface ApiErrorBody {
+  error?: {
+    code?: string;
+    normalized_code?: string;
+    message?: string;
+    errors?: Record<string, string[]>;
+    platform?: string;
+    retry_after?: number | string;
+  };
+}
+
 /**
  * Parse an API error response into the appropriate error class.
  */
-export function parseApiError(status: number, body: { error?: { code?: string; message?: string; errors?: Record<string, string[]>; platform?: string } }): UniPostError {
-  const msg = body.error?.message || "Unknown API error";
-  const code = body.error?.code || "unknown";
+export function parseApiError(status: number, body: ApiErrorBody): UniPostError {
+  const msg = body?.error?.message || "Unknown API error";
+  const code = body?.error?.normalized_code || body?.error?.code || "unknown";
 
   switch (status) {
     case 401:
@@ -83,14 +94,16 @@ export function parseApiError(status: number, body: { error?: { code?: string; m
     case 404:
       return new NotFoundError(msg);
     case 422:
-      return new ValidationError(msg, body.error?.errors);
-    case 429:
-      return new RateLimitError(0, msg);
+      return new ValidationError(msg, body?.error?.errors || {});
+    case 429: {
+      const retryAfter = parseInt(String(body?.error?.retry_after ?? "1"), 10);
+      return new RateLimitError(retryAfter, msg);
+    }
     case 403:
       if (code === "quota_exceeded") return new QuotaError(msg);
       return new UniPostError(msg, status, code);
     case 502:
-      if (body.error?.platform) return new PlatformError(msg, body.error.platform);
+      if (body?.error?.platform) return new PlatformError(msg, body.error.platform);
       return new UniPostError(msg, status, code);
     default:
       return new UniPostError(msg, status, code);

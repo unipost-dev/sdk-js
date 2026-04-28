@@ -1,50 +1,6 @@
 import type { HttpClient } from "../http.js";
 import type { MediaUploadRequest, MediaUploadResponse } from "../types/index.js";
 
-export class Media {
-  constructor(private readonly http: HttpClient) {}
-
-  /** Request a presigned upload URL. */
-  async upload(params: MediaUploadRequest): Promise<MediaUploadResponse> {
-    const res = await this.http.post<{ data: MediaUploadResponse }>("/v1/media/upload", {
-      filename: params.filename,
-      content_type: params.contentType,
-      size_bytes: params.sizeBytes,
-    });
-    return res.data;
-  }
-
-  /**
-   * Convenience: upload a local file (Node.js only).
-   * Reads the file, requests a presigned URL, uploads, and returns the mediaId.
-   */
-  async uploadFile(filePath: string): Promise<string> {
-    // Dynamic import to avoid breaking browser/edge environments
-    const { readFileSync, statSync } = await import("node:fs");
-    const { basename } = await import("node:path");
-
-    const stats = statSync(filePath);
-    const filename = basename(filePath);
-    const ext = filename.split(".").pop()?.toLowerCase() || "";
-    const contentType = MIME_TYPES[ext] || "application/octet-stream";
-
-    const { mediaId, uploadUrl } = await this.upload({
-      filename,
-      contentType,
-      sizeBytes: stats.size,
-    });
-
-    const fileBuffer = readFileSync(filePath);
-    await fetch(uploadUrl, {
-      method: "PUT",
-      body: fileBuffer,
-      headers: { "Content-Type": contentType },
-    });
-
-    return mediaId;
-  }
-}
-
 const MIME_TYPES: Record<string, string> = {
   jpg: "image/jpeg",
   jpeg: "image/jpeg",
@@ -53,4 +9,77 @@ const MIME_TYPES: Record<string, string> = {
   webp: "image/webp",
   mp4: "video/mp4",
   mov: "video/quicktime",
+  webm: "video/webm",
 };
+
+function normalize(data: MediaUploadResponse | undefined | null): MediaUploadResponse | undefined {
+  if (!data) return data ?? undefined;
+  return {
+    ...data,
+    mediaId: data.media_id ?? data.id ?? data.mediaId,
+    uploadUrl: data.upload_url ?? data.uploadUrl,
+  };
+}
+
+export class Media {
+  constructor(private readonly http: HttpClient) {}
+
+  /** Request a presigned upload URL. */
+  async upload(params: MediaUploadRequest): Promise<MediaUploadResponse> {
+    const body: Record<string, unknown> = {
+      filename: params.filename,
+      content_type: params.contentType,
+      size_bytes: params.sizeBytes,
+    };
+    if (params.contentHash) body.content_hash = params.contentHash;
+    const res = await this.http.post<{ data: MediaUploadResponse }>("/v1/media", body);
+    return normalize(res.data) as MediaUploadResponse;
+  }
+
+  /** Fetch metadata for a previously uploaded media item. */
+  async get(mediaId: string): Promise<MediaUploadResponse> {
+    const res = await this.http.get<{ data: MediaUploadResponse }>(`/v1/media/${mediaId}`);
+    return res.data;
+  }
+
+  async delete(mediaId: string): Promise<void> {
+    await this.http.delete(`/v1/media/${mediaId}`);
+  }
+
+  /**
+   * Convenience: upload a local file (Node.js only).
+   * Requests a presigned URL, PUTs the file, and returns the mediaId.
+   */
+  async uploadFile(filePath: string): Promise<string> {
+    const { readFileSync, statSync } = await import("node:fs");
+    const { basename } = await import("node:path");
+
+    const stats = statSync(filePath);
+    const filename = basename(filePath);
+    const ext = filename.split(".").pop()?.toLowerCase() || "";
+    const contentType = MIME_TYPES[ext] || "application/octet-stream";
+
+    const result = await this.upload({
+      filename,
+      contentType,
+      sizeBytes: stats.size,
+    });
+    const mediaId = result.mediaId ?? result.media_id ?? result.id;
+    const uploadUrl = result.uploadUrl ?? result.upload_url;
+    if (!mediaId || !uploadUrl) {
+      throw new Error("unipost: media upload missing mediaId or uploadUrl");
+    }
+
+    const fileBuffer = readFileSync(filePath);
+    const uploadResponse = await fetch(uploadUrl, {
+      method: "PUT",
+      body: fileBuffer,
+      headers: { "Content-Type": contentType },
+    });
+    if (!uploadResponse.ok) {
+      throw new Error(`Media upload failed with status ${uploadResponse.status}`);
+    }
+
+    return mediaId;
+  }
+}

@@ -10,11 +10,16 @@ function getSubtle(): SubtleCrypto {
 /**
  * Verify the signature of a UniPost webhook request.
  *
- * Uses HMAC-SHA256 with the webhook secret to validate the payload.
+ * Uses HMAC-SHA256 with the webhook secret. The signature value may
+ * optionally be prefixed with `sha256=` (case-insensitive).
  */
 export async function verifyWebhookSignature(options: VerifyWebhookOptions): Promise<boolean> {
   const { payload, signature, secret } = options;
+  if (!signature || !secret) return false;
+
   const subtle = getSubtle();
+  const normalized = String(signature).trim().replace(/^sha256=/i, "");
+  if (!normalized) return false;
 
   const encoder = new TextEncoder();
   const key = await subtle.importKey(
@@ -29,7 +34,7 @@ export async function verifyWebhookSignature(options: VerifyWebhookOptions): Pro
   const signatureBytes = await subtle.sign("HMAC", key, payloadBytes);
   const computed = bufferToHex(signatureBytes);
 
-  return timingSafeEqual(computed, signature);
+  return timingSafeEqual(computed, normalized);
 }
 
 function bufferToHex(buffer: ArrayBuffer): string {

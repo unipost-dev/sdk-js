@@ -1,8 +1,8 @@
 import { parseApiError, RateLimitError } from "./errors.js";
 
-const DEFAULT_BASE_URL = "https://api.unipost.dev";
-const DEFAULT_TIMEOUT = 30_000;
 const MAX_RETRIES = 2;
+const SDK_VERSION = "0.2.4";
+const USER_AGENT = `@unipost/sdk/${SDK_VERSION}`;
 
 export interface HttpClientOptions {
   apiKey: string;
@@ -26,7 +26,7 @@ export class HttpClient {
     path: string,
     options?: {
       body?: unknown;
-      query?: Record<string, string | number | undefined>;
+      query?: Record<string, string | number | boolean | undefined | null>;
       headers?: Record<string, string>;
     },
   ): Promise<T> {
@@ -34,7 +34,7 @@ export class HttpClient {
 
     if (options?.query) {
       for (const [key, value] of Object.entries(options.query)) {
-        if (value !== undefined) {
+        if (value !== undefined && value !== null && value !== "") {
           url.searchParams.set(key, String(value));
         }
       }
@@ -42,10 +42,13 @@ export class HttpClient {
 
     const headers: Record<string, string> = {
       Authorization: `Bearer ${this.apiKey}`,
-      "Content-Type": "application/json",
-      "User-Agent": "@unipost/sdk/0.1.0",
+      "User-Agent": USER_AGENT,
       ...options?.headers,
     };
+
+    if (options?.body !== undefined && !headers["Content-Type"]) {
+      headers["Content-Type"] = "application/json";
+    }
 
     const init: RequestInit = {
       method,
@@ -65,10 +68,10 @@ export class HttpClient {
 
         if (response.ok) {
           if (response.status === 204) return undefined as T;
-          return (await response.json()) as T;
+          const text = await response.text();
+          return (text ? JSON.parse(text) : undefined) as T;
         }
 
-        // Rate limit — retry with backoff
         if (response.status === 429) {
           const retryAfter = parseInt(response.headers.get("Retry-After") || "1", 10);
           if (attempt < MAX_RETRIES) {
@@ -78,8 +81,7 @@ export class HttpClient {
           throw new RateLimitError(retryAfter);
         }
 
-        // Non-retryable error
-        const body = await response.json().catch(() => ({})) as { error?: { code?: string; message?: string; errors?: Record<string, string[]>; platform?: string } };
+        const body = (await response.json().catch(() => ({}))) as Parameters<typeof parseApiError>[1];
         throw parseApiError(response.status, body);
       } catch (err) {
         if (err instanceof RateLimitError && attempt < MAX_RETRIES) {
@@ -94,12 +96,16 @@ export class HttpClient {
     throw lastError || new Error("Request failed after retries");
   }
 
-  get<T>(path: string, query?: Record<string, string | number | undefined>) {
+  get<T>(path: string, query?: Record<string, string | number | boolean | undefined | null>) {
     return this.request<T>("GET", path, { query });
   }
 
   post<T>(path: string, body?: unknown, headers?: Record<string, string>) {
     return this.request<T>("POST", path, { body, headers });
+  }
+
+  patch<T>(path: string, body?: unknown) {
+    return this.request<T>("PATCH", path, { body });
   }
 
   put<T>(path: string, body?: unknown) {

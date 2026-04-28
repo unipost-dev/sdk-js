@@ -1,6 +1,6 @@
 {
   "name": "@unipost/sdk",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "Official UniPost API client for JavaScript and TypeScript",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",

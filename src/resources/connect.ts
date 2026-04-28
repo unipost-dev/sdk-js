@@ -8,6 +8,7 @@ export class Connect {
   async createSession(params: CreateConnectSessionParams): Promise<ConnectSession> {
     const res = await this.http.post<{ data: ConnectSession }>("/v1/connect/sessions", {
       platform: params.platform,
+      profile_id: params.profileId,
       external_user_id: params.externalUserId,
       external_user_email: params.externalUserEmail,
       return_url: params.returnUrl,

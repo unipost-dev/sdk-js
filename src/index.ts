@@ -12,10 +12,10 @@ export {
   QuotaError,
 } from "./errors.js";
 
-// Webhook
+// Webhook signature verification
 export { verifyWebhookSignature } from "./webhook.js";
 
-// Types (re-export everything)
+// Types
 export type {
   // Accounts
   Platform,
@@ -24,21 +24,50 @@ export type {
   SocialAccount,
   AccountHealth,
   ListAccountsParams,
+  ConnectAccountParams,
+  // Workspace
+  Workspace,
+  UpdateWorkspaceParams,
+  // Profiles
+  Profile,
+  CreateProfileParams,
+  UpdateProfileParams,
+  // API keys
+  ApiKey,
+  ApiKeyEnvironment,
+  CreatedApiKey,
+  CreateApiKeyParams,
+  // Platform credentials / plans
+  PlatformCredential,
+  CreatePlatformCredentialParams,
+  Plan,
   // Posts
   PostStatus,
   Post,
   PlatformResult,
   CreatePostPlatformPost,
   CreatePostParams,
+  UpdatePostParams,
+  ValidationIssue,
+  ValidationResult,
   ListPostsParams,
-  PostAnalytics,
+  PostQueueSnapshot,
+  PostAnalyticsItem,
+  PostPreviewLink,
+  BulkPostError,
+  BulkPostResult,
+  // Delivery jobs
+  DeliveryJob,
+  ListDeliveryJobsParams,
   // Webhooks
   WebhookEventType,
   WebhookEvent,
   VerifyWebhookOptions,
-  // Profiles
-  Profile,
-  // Connect
+  WebhookSubscription,
+  WebhookSubscriptionSecret,
+  CreateWebhookParams,
+  UpdateWebhookParams,
+  // Connect / Users
   ConnectSession,
   CreateConnectSessionParams,
   ManagedUser,
@@ -50,7 +79,10 @@ export type {
   GroupBy,
   AnalyticsRollupParams,
   AnalyticsRollup,
-  AnalyticsBucket,
+  AnalyticsQueryParams,
+  // Usage / OAuth
+  Usage,
+  OAuthConnectResponse,
   // Pagination
   PaginatedResponse,
   // Client options

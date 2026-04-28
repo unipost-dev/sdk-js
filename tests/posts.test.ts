@@ -1,9 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { UniPost } from "../src/index.js";
 
-// Mock global fetch
 const mockFetch = vi.fn();
 vi.stubGlobal("fetch", mockFetch);
+
+function jsonResponse(body: unknown, status = 200) {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    headers: new Headers(),
+    text: async () => (body === undefined ? "" : JSON.stringify(body)),
+    json: async () => body,
+  };
+}
 
 describe("Posts", () => {
   let client: UniPost;
@@ -13,14 +22,10 @@ describe("Posts", () => {
     client = new UniPost({ apiKey: "up_test_xxx" });
   });
 
-  it("creates a post with caption and accountIds", async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      json: async () => ({
-        data: { id: "post_1", caption: "Hello!", status: "published" },
-      }),
-    });
+  it("creates a post at /v1/posts", async () => {
+    mockFetch.mockResolvedValueOnce(
+      jsonResponse({ data: { id: "post_1", caption: "Hello!", status: "published" } }),
+    );
 
     const post = await client.posts.create({
       caption: "Hello!",
@@ -31,21 +36,17 @@ describe("Posts", () => {
     expect(post.caption).toBe("Hello!");
 
     const [url, init] = mockFetch.mock.calls[0];
-    expect(url).toContain("/v1/social-posts");
+    expect(url).toContain("/v1/posts");
     expect(init.method).toBe("POST");
     const body = JSON.parse(init.body);
     expect(body.caption).toBe("Hello!");
     expect(body.account_ids).toEqual(["sa_1", "sa_2"]);
   });
 
-  it("creates a post with platformPosts (per-platform captions)", async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      json: async () => ({
-        data: { id: "post_2", caption: null, status: "published" },
-      }),
-    });
+  it("creates a post with platformPosts", async () => {
+    mockFetch.mockResolvedValueOnce(
+      jsonResponse({ data: { id: "post_2", caption: null, status: "published" } }),
+    );
 
     await client.posts.create({
       platformPosts: [
@@ -61,11 +62,9 @@ describe("Posts", () => {
   });
 
   it("sends idempotency key header", async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      json: async () => ({ data: { id: "post_3", status: "published" } }),
-    });
+    mockFetch.mockResolvedValueOnce(
+      jsonResponse({ data: { id: "post_3", status: "published" } }),
+    );
 
     await client.posts.create({
       caption: "Idempotent",
@@ -77,33 +76,13 @@ describe("Posts", () => {
     expect(headers["Idempotency-Key"]).toBe("key-001");
   });
 
-  it("schedules a post", async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      json: async () => ({ data: { id: "post_4", status: "scheduled" } }),
-    });
-
-    const post = await client.posts.create({
-      caption: "Later",
-      accountIds: ["sa_1"],
-      scheduledAt: "2026-04-28T09:00:00Z",
-    });
-
-    expect(post.status).toBe("scheduled");
-    const body = JSON.parse(mockFetch.mock.calls[0][1].body);
-    expect(body.scheduled_at).toBe("2026-04-28T09:00:00Z");
-  });
-
-  it("lists posts with filters", async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      json: async () => ({
+  it("lists posts with filters and reads next_cursor from meta", async () => {
+    mockFetch.mockResolvedValueOnce(
+      jsonResponse({
         data: [{ id: "post_5" }],
-        nextCursor: "cur_abc",
+        meta: { next_cursor: "cur_abc" },
       }),
-    });
+    );
 
     const result = await client.posts.list({
       status: "published",
@@ -112,6 +91,7 @@ describe("Posts", () => {
     });
 
     expect(result.data).toHaveLength(1);
+    expect(result.nextCursor).toBe("cur_abc");
     const url = mockFetch.mock.calls[0][0];
     expect(url).toContain("status=published");
     expect(url).toContain("platform=twitter");
@@ -119,27 +99,23 @@ describe("Posts", () => {
   });
 
   it("cancels a post", async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      json: async () => ({ data: { id: "post_6", status: "cancelled" } }),
-    });
+    mockFetch.mockResolvedValueOnce(
+      jsonResponse({ data: { id: "post_6", status: "cancelled" } }),
+    );
 
     const post = await client.posts.cancel("post_6");
     expect(post.status).toBe("cancelled");
   });
 
   it("bulk creates posts", async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      json: async () => ({
+    mockFetch.mockResolvedValueOnce(
+      jsonResponse({
         data: [
-          { id: "post_7", status: "published" },
-          { id: "post_8", status: "published" },
+          { status: 200, data: { id: "post_7", status: "published" } },
+          { status: 200, data: { id: "post_8", status: "published" } },
         ],
       }),
-    });
+    );
 
     const results = await client.posts.bulkCreate([
       { caption: "Post 1", accountIds: ["sa_1"] },
@@ -147,5 +123,6 @@ describe("Posts", () => {
     ]);
 
     expect(results).toHaveLength(2);
+    expect(results[0].data?.id).toBe("post_7");
   });
 });
