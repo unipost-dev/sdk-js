@@ -11,12 +11,11 @@ export class Connect {
 
   /** Get an OAuth auth URL for connecting one self-owned social account. */
   async getConnectUrl(params: GetConnectUrlParams): Promise<OAuthConnectResponse> {
-    const query: Record<string, string | undefined> = {};
-    if (params.redirectUrl) query.redirect_url = params.redirectUrl;
-    const res = await this.http.get<{ data: OAuthConnectResponse }>(
-      `/v1/profiles/${params.profileId}/oauth/connect/${params.platform}`,
-      query,
-    );
+    const res = await this.http.post<{ data: OAuthConnectResponse }>("/v1/oauth/connect", {
+      profile_id: params.profileId,
+      platform: params.platform,
+      redirect_url: params.redirectUrl,
+    });
     return res.data;
   }
 

@@ -9,9 +9,10 @@ export class OAuth {
    * Pass `redirectUrl` to override the default callback.
    */
   async connect(platform: string, params: { redirectUrl?: string } = {}): Promise<OAuthConnectResponse> {
-    const query: Record<string, string | undefined> = {};
-    if (params.redirectUrl) query.redirect_url = params.redirectUrl;
-    const res = await this.http.get<{ data: OAuthConnectResponse }>(`/v1/oauth/connect/${platform}`, query);
+    const res = await this.http.post<{ data: OAuthConnectResponse }>("/v1/oauth/connect", {
+      platform,
+      redirect_url: params.redirectUrl,
+    });
     return res.data;
   }
 }
