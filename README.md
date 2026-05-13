@@ -123,6 +123,19 @@ const session = await client.connect.createSession({
 // Send session.url to your user
 ```
 
+### Get Connect URL (Your Own Accounts)
+
+```typescript
+const { auth_url } = await client.connect.getConnectUrl({
+  profileId: 'pr_brand_us',
+  platform: 'linkedin',
+  // optional
+  redirectUrl: 'https://app.acme.com/integrations/done',
+})
+
+console.log(auth_url)
+```
+
 ### Webhook Verification
 
 ```typescript

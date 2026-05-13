@@ -152,6 +152,12 @@ export interface CreateConnectSessionParams {
   returnUrl?: string;
 }
 
+export interface GetConnectUrlParams {
+  profileId: string;
+  platform: string;
+  redirectUrl?: string;
+}
+
 export interface ManagedUser {
   external_user_id: string;
   external_user_email?: string;
