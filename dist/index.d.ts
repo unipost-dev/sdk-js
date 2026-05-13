@@ -297,6 +297,7 @@ interface Plan {
 interface ConnectSession {
     id: string;
     url: string;
+    allow_quickstart_creds?: boolean;
     status: "pending" | "completed" | "expired" | string;
     expires_at: string;
     platform: string;
@@ -313,6 +314,12 @@ interface CreateConnectSessionParams {
     externalUserId: string;
     externalUserEmail?: string;
     returnUrl?: string;
+    allowQuickstartCreds?: boolean;
+}
+interface GetConnectUrlParams {
+    profileId: string;
+    platform: string;
+    redirectUrl?: string;
 }
 interface ManagedUser {
     external_user_id: string;
@@ -545,6 +552,8 @@ declare class Analytics {
 declare class Connect {
     private readonly http;
     constructor(http: HttpClient);
+    /** Get an OAuth auth URL for connecting one self-owned social account. */
+    getConnectUrl(params: GetConnectUrlParams): Promise<OAuthConnectResponse>;
     /** Create a Connect session for end-user OAuth. */
     createSession(params: CreateConnectSessionParams): Promise<ConnectSession>;
     /** Get the status of a Connect session. */
@@ -669,4 +678,4 @@ declare class QuotaError extends UniPostError {
  */
 declare function verifyWebhookSignature(options: VerifyWebhookOptions): Promise<boolean>;
 
-export { type AccountHealth, type AccountStatus, type AnalyticsQueryParams, type AnalyticsRollup, type AnalyticsRollupParams, type ApiKey, type ApiKeyEnvironment, AuthError, type BulkPostError, type BulkPostResult, type ConnectAccountParams, type ConnectSession, type ConnectionType, type CreateApiKeyParams, type CreateConnectSessionParams, type CreatePlatformCredentialParams, type CreatePostParams, type CreatePostPlatformPost, type CreateProfileParams, type CreateWebhookParams, type CreatedApiKey, type DeliveryJob, type Granularity, type GroupBy, type ListAccountsParams, type ListDeliveryJobsParams, type ListPostsParams, type ManagedUser, type MediaUploadRequest, type MediaUploadResponse, NotFoundError, type OAuthConnectResponse, type PaginatedResponse, type Plan, type Platform, type PlatformCredential, PlatformError, type PlatformResult, type Post, type PostAnalyticsItem, type PostPreviewLink, type PostQueueSnapshot, type PostStatus, type Profile, QuotaError, RateLimitError, type SocialAccount, UniPost, type UniPostClientOptions, UniPostError, type UpdatePostParams, type UpdateProfileParams, type UpdateWebhookParams, type UpdateWorkspaceParams, type Usage, ValidationError, type ValidationIssue, type ValidationResult, type VerifyWebhookOptions, type WebhookEvent, type WebhookEventType, type WebhookSubscription, type WebhookSubscriptionSecret, type Workspace, verifyWebhookSignature };
+export { type AccountHealth, type AccountStatus, type AnalyticsQueryParams, type AnalyticsRollup, type AnalyticsRollupParams, type ApiKey, type ApiKeyEnvironment, AuthError, type BulkPostError, type BulkPostResult, type ConnectAccountParams, type ConnectSession, type ConnectionType, type CreateApiKeyParams, type CreateConnectSessionParams, type CreatePlatformCredentialParams, type CreatePostParams, type CreatePostPlatformPost, type CreateProfileParams, type CreateWebhookParams, type CreatedApiKey, type DeliveryJob, type GetConnectUrlParams, type Granularity, type GroupBy, type ListAccountsParams, type ListDeliveryJobsParams, type ListPostsParams, type ManagedUser, type MediaUploadRequest, type MediaUploadResponse, NotFoundError, type OAuthConnectResponse, type PaginatedResponse, type Plan, type Platform, type PlatformCredential, PlatformError, type PlatformResult, type Post, type PostAnalyticsItem, type PostPreviewLink, type PostQueueSnapshot, type PostStatus, type Profile, QuotaError, RateLimitError, type SocialAccount, UniPost, type UniPostClientOptions, UniPostError, type UpdatePostParams, type UpdateProfileParams, type UpdateWebhookParams, type UpdateWorkspaceParams, type Usage, ValidationError, type ValidationIssue, type ValidationResult, type VerifyWebhookOptions, type WebhookEvent, type WebhookEventType, type WebhookSubscription, type WebhookSubscriptionSecret, type Workspace, verifyWebhookSignature };

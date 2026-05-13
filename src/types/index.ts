@@ -133,6 +133,7 @@ export interface Plan {
 export interface ConnectSession {
   id: string;
   url: string;
+  allow_quickstart_creds?: boolean;
   status: "pending" | "completed" | "expired" | string;
   expires_at: string;
   platform: string;
@@ -150,6 +151,7 @@ export interface CreateConnectSessionParams {
   externalUserId: string;
   externalUserEmail?: string;
   returnUrl?: string;
+  allowQuickstartCreds?: boolean;
 }
 
 export interface GetConnectUrlParams {

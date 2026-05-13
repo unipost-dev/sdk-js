@@ -119,6 +119,7 @@ const session = await client.connect.createSession({
   platform: 'twitter',
   externalUserId: 'your_user_123',
   returnUrl: 'https://yourapp.com/callback',
+  allowQuickstartCreds: true, // optional: fall back to UniPost quickstart OAuth app
 })
 // Send session.url to your user
 ```

@@ -27,6 +27,7 @@ export class Connect {
       external_user_id: params.externalUserId,
       external_user_email: params.externalUserEmail,
       return_url: params.returnUrl,
+      allow_quickstart_creds: params.allowQuickstartCreds,
     });
     return res.data;
   }

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.9 (2026-05-13)
+
+- Add `allowQuickstartCreds` to `client.connect.createSession(...)`
+- Surface `allow_quickstart_creds` on Connect session responses
+- Document white-label vs quickstart Connect session configuration
+
 ## 0.1.0 (2026-04-09)
 
 Initial release.

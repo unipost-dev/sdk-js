@@ -1,7 +1,7 @@
 import { parseApiError, RateLimitError } from "./errors.js";
 
 const MAX_RETRIES = 2;
-const SDK_VERSION = "0.2.5";
+const SDK_VERSION = "0.2.9";
 const USER_AGENT = `@unipost/sdk/${SDK_VERSION}`;
 
 export interface HttpClientOptions {

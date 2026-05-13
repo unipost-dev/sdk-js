@@ -122,7 +122,7 @@ function parseApiError(status, body) {
 
 // src/http.ts
 var MAX_RETRIES = 2;
-var SDK_VERSION = "0.2.5";
+var SDK_VERSION = "0.2.9";
 var USER_AGENT = `@unipost/sdk/${SDK_VERSION}`;
 var HttpClient = class {
   apiKey;
@@ -684,6 +684,15 @@ var Connect = class {
     this.http = http;
   }
   http;
+  /** Get an OAuth auth URL for connecting one self-owned social account. */
+  async getConnectUrl(params) {
+    const res = await this.http.post("/v1/oauth/connect", {
+      profile_id: params.profileId,
+      platform: params.platform,
+      redirect_url: params.redirectUrl
+    });
+    return res.data;
+  }
   /** Create a Connect session for end-user OAuth. */
   async createSession(params) {
     const res = await this.http.post("/v1/connect/sessions", {
@@ -691,7 +700,8 @@ var Connect = class {
       profile_id: params.profileId,
       external_user_id: params.externalUserId,
       external_user_email: params.externalUserEmail,
-      return_url: params.returnUrl
+      return_url: params.returnUrl,
+      allow_quickstart_creds: params.allowQuickstartCreds
     });
     return res.data;
   }
@@ -773,9 +783,10 @@ var OAuth = class {
    * Pass `redirectUrl` to override the default callback.
    */
   async connect(platform, params = {}) {
-    const query = {};
-    if (params.redirectUrl) query.redirect_url = params.redirectUrl;
-    const res = await this.http.get(`/v1/oauth/connect/${platform}`, query);
+    const res = await this.http.post("/v1/oauth/connect", {
+      platform,
+      redirect_url: params.redirectUrl
+    });
     return res.data;
   }
 };
