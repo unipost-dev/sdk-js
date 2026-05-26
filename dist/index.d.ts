@@ -13,7 +13,12 @@ declare class HttpClient {
         query?: Record<string, string | number | boolean | undefined | null>;
         headers?: Record<string, string>;
     }): Promise<T>;
+    requestText(method: string, path: string, options?: {
+        query?: Record<string, string | number | boolean | undefined | null>;
+        headers?: Record<string, string>;
+    }): Promise<string>;
     get<T>(path: string, query?: Record<string, string | number | boolean | undefined | null>): Promise<T>;
+    getText(path: string, query?: Record<string, string | number | boolean | undefined | null>): Promise<string>;
     post<T>(path: string, body?: unknown, headers?: Record<string, string>): Promise<T>;
     patch<T>(path: string, body?: unknown): Promise<T>;
     put<T>(path: string, body?: unknown): Promise<T>;
@@ -367,6 +372,121 @@ interface AnalyticsRollup {
     group_by: string[];
     series: Record<string, unknown>[];
 }
+type AnalyticsPostsSort = "published_at" | "published_at_asc" | "published_at_desc" | "created_at" | "created_at_asc" | "created_at_desc" | "impressions" | "impressions_asc" | "reach" | "reach_asc" | "likes" | "likes_asc" | "comments" | "comments_asc" | "shares" | "shares_asc" | "saves" | "saves_asc" | "clicks" | "clicks_asc" | "video_views" | "video_views_asc" | "engagement_rate" | "engagement_rate_asc" | string;
+interface AnalyticsPostsParams extends AnalyticsQueryParams {
+    accountId?: string;
+    postId?: string;
+    limit?: number;
+    cursor?: string;
+    sort?: AnalyticsPostsSort;
+}
+interface AnalyticsPostRow {
+    post_id: string;
+    social_post_result_id: string;
+    social_account_id: string;
+    profile_id: string;
+    platform: string;
+    external_id?: string;
+    external_user_id?: string;
+    result_status: string;
+    post_status: string;
+    caption?: string;
+    url?: string;
+    created_at: string;
+    published_at?: string;
+    impressions: number;
+    reach: number;
+    likes: number;
+    comments: number;
+    shares: number;
+    saves: number;
+    clicks: number;
+    video_views: number;
+    engagement_rate: number;
+    platform_specific?: Record<string, unknown>;
+    fetched_at?: string;
+    consecutive_failures: number;
+    last_failure_reason?: string;
+}
+interface AnalyticsPlatformParams {
+    from?: string;
+    to?: string;
+    profileId?: string;
+}
+interface AnalyticsPlatformAvailability {
+    platform: string;
+    supported_metrics: string[];
+    refresh_supported: boolean;
+    account_count: number;
+    active_account_count: number;
+    needs_reconnect_count: number;
+    analytics_row_count: number;
+    last_successful_fetch_at?: string;
+    last_failure_reason?: string;
+    health: string;
+    notes?: string[];
+}
+interface AnalyticsPlatformSummary {
+    posts: number;
+    accounts: number;
+    impressions: number;
+    reach: number;
+    likes: number;
+    comments: number;
+    shares: number;
+    saves: number;
+    clicks: number;
+    video_views: number;
+    engagement_rate: number;
+}
+interface AnalyticsPlatformTrendRow {
+    date: string;
+    posts: number;
+    impressions: number;
+    reach: number;
+    likes: number;
+    comments: number;
+    shares: number;
+    saves: number;
+    clicks: number;
+    video_views: number;
+}
+interface AnalyticsAccountAvailability {
+    social_account_id: string;
+    profile_id: string;
+    account_name?: string;
+    external_user_id?: string;
+    status: string;
+    post_count: number;
+    last_successful_fetch_at?: string;
+    last_failure_reason?: string;
+}
+interface AnalyticsPlatformDetail {
+    platform: string;
+    period: {
+        start: string;
+        end: string;
+    };
+    availability: AnalyticsPlatformAvailability;
+    summary: AnalyticsPlatformSummary;
+    trend: AnalyticsPlatformTrendRow[];
+    accounts: AnalyticsAccountAvailability[];
+    top_posts: AnalyticsPostRow[];
+}
+interface AnalyticsRefreshParams extends AnalyticsPlatformParams {
+    platform?: string;
+    accountId?: string;
+    postId?: string;
+    limit?: number;
+}
+interface AnalyticsRefreshResponse {
+    status: string;
+    matched_count: number;
+    requested_count: number;
+    limit: number;
+    processed_by?: string;
+    filters?: Record<string, unknown>;
+}
 interface Usage {
     period: string;
     post_count: number;
@@ -547,6 +667,16 @@ declare class Analytics {
     byPlatform(params?: AnalyticsQueryParams): Promise<Record<string, unknown>[]>;
     /** Aggregated rollup with a granularity (day/week/month) and group_by axis. */
     rollup(params: AnalyticsRollupParams): Promise<AnalyticsRollup>;
+    /** Paginated post-level analytics rows across UniPost-published content. */
+    posts(params?: AnalyticsPostsParams): Promise<PaginatedResponse<AnalyticsPostRow>>;
+    /** Export post-level analytics rows as CSV text. */
+    exportPostsCsv(params?: AnalyticsPostsParams): Promise<string>;
+    /** Analytics availability and health by destination platform. */
+    platforms(params?: AnalyticsPlatformParams): Promise<AnalyticsPlatformAvailability[]>;
+    /** Detailed analytics for one platform, including summary, trend, accounts, and top posts. */
+    platform(platform: string, params?: AnalyticsPlatformParams): Promise<AnalyticsPlatformDetail>;
+    /** Mark matching analytics rows stale so background workers refresh platform metrics. */
+    refresh(params?: AnalyticsRefreshParams): Promise<AnalyticsRefreshResponse>;
 }
 
 declare class Connect {

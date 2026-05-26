@@ -96,8 +96,74 @@ export class HttpClient {
     throw lastError || new Error("Request failed after retries");
   }
 
+  async requestText(
+    method: string,
+    path: string,
+    options?: {
+      query?: Record<string, string | number | boolean | undefined | null>;
+      headers?: Record<string, string>;
+    },
+  ): Promise<string> {
+    const url = new URL(path, this.baseUrl);
+
+    if (options?.query) {
+      for (const [key, value] of Object.entries(options.query)) {
+        if (value !== undefined && value !== null && value !== "") {
+          url.searchParams.set(key, String(value));
+        }
+      }
+    }
+
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${this.apiKey}`,
+      "User-Agent": USER_AGENT,
+      ...options?.headers,
+    };
+
+    let lastError: Error | null = null;
+
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        const response = await fetch(url.toString(), {
+          method,
+          headers,
+          signal: AbortSignal.timeout(this.timeout),
+        });
+
+        if (response.ok) {
+          return await response.text();
+        }
+
+        if (response.status === 429) {
+          const retryAfter = parseInt(response.headers.get("Retry-After") || "1", 10);
+          if (attempt < MAX_RETRIES) {
+            await sleep(retryAfter * 1000);
+            continue;
+          }
+          throw new RateLimitError(retryAfter);
+        }
+
+        const body = (await response.json().catch(() => ({}))) as Parameters<typeof parseApiError>[1];
+        throw parseApiError(response.status, body);
+      } catch (err) {
+        if (err instanceof RateLimitError && attempt < MAX_RETRIES) {
+          await sleep(err.retryAfter * 1000);
+          lastError = err;
+          continue;
+        }
+        throw err;
+      }
+    }
+
+    throw lastError || new Error("Request failed after retries");
+  }
+
   get<T>(path: string, query?: Record<string, string | number | boolean | undefined | null>) {
     return this.request<T>("GET", path, { query });
+  }
+
+  getText(path: string, query?: Record<string, string | number | boolean | undefined | null>) {
+    return this.requestText("GET", path, { query });
   }
 
   post<T>(path: string, body?: unknown, headers?: Record<string, string>) {

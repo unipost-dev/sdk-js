@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.0 (2026-05-26)
+
+- Add analytics explorer helpers: `client.analytics.posts`, `exportPostsCsv`, `platforms`, `platform`, and `refresh`
+- Add typed post-level analytics, platform availability, platform detail, and refresh response shapes
+- Add CSV text response support for analytics exports
+
 ## 0.2.9 (2026-05-13)
 
 - Add `allowQuickstartCreds` to `client.connect.createSession(...)`

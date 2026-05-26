@@ -96,6 +96,25 @@ for await (const post of client.posts.listAll({ status: 'published' })) {
 const analytics = await client.posts.analytics('post_xxx')
 ```
 
+### Analytics Explorer
+
+```typescript
+const posts = await client.analytics.posts({
+  platform: 'tiktok',
+  limit: 25,
+  sort: 'engagement_rate',
+})
+
+const platforms = await client.analytics.platforms()
+const tiktok = await client.analytics.platform('tiktok')
+const csv = await client.analytics.exportPostsCsv({ platform: 'pinterest' })
+
+await client.analytics.refresh({
+  platform: 'threads',
+  limit: 100,
+})
+```
+
 ### Media Upload
 
 ```typescript

@@ -222,6 +222,154 @@ export interface AnalyticsRollup {
   series: Record<string, unknown>[];
 }
 
+export type AnalyticsPostsSort =
+  | "published_at"
+  | "published_at_asc"
+  | "published_at_desc"
+  | "created_at"
+  | "created_at_asc"
+  | "created_at_desc"
+  | "impressions"
+  | "impressions_asc"
+  | "reach"
+  | "reach_asc"
+  | "likes"
+  | "likes_asc"
+  | "comments"
+  | "comments_asc"
+  | "shares"
+  | "shares_asc"
+  | "saves"
+  | "saves_asc"
+  | "clicks"
+  | "clicks_asc"
+  | "video_views"
+  | "video_views_asc"
+  | "engagement_rate"
+  | "engagement_rate_asc"
+  | string;
+
+export interface AnalyticsPostsParams extends AnalyticsQueryParams {
+  accountId?: string;
+  postId?: string;
+  limit?: number;
+  cursor?: string;
+  sort?: AnalyticsPostsSort;
+}
+
+export interface AnalyticsPostRow {
+  post_id: string;
+  social_post_result_id: string;
+  social_account_id: string;
+  profile_id: string;
+  platform: string;
+  external_id?: string;
+  external_user_id?: string;
+  result_status: string;
+  post_status: string;
+  caption?: string;
+  url?: string;
+  created_at: string;
+  published_at?: string;
+  impressions: number;
+  reach: number;
+  likes: number;
+  comments: number;
+  shares: number;
+  saves: number;
+  clicks: number;
+  video_views: number;
+  engagement_rate: number;
+  platform_specific?: Record<string, unknown>;
+  fetched_at?: string;
+  consecutive_failures: number;
+  last_failure_reason?: string;
+}
+
+export interface AnalyticsPlatformParams {
+  from?: string;
+  to?: string;
+  profileId?: string;
+}
+
+export interface AnalyticsPlatformAvailability {
+  platform: string;
+  supported_metrics: string[];
+  refresh_supported: boolean;
+  account_count: number;
+  active_account_count: number;
+  needs_reconnect_count: number;
+  analytics_row_count: number;
+  last_successful_fetch_at?: string;
+  last_failure_reason?: string;
+  health: string;
+  notes?: string[];
+}
+
+export interface AnalyticsPlatformSummary {
+  posts: number;
+  accounts: number;
+  impressions: number;
+  reach: number;
+  likes: number;
+  comments: number;
+  shares: number;
+  saves: number;
+  clicks: number;
+  video_views: number;
+  engagement_rate: number;
+}
+
+export interface AnalyticsPlatformTrendRow {
+  date: string;
+  posts: number;
+  impressions: number;
+  reach: number;
+  likes: number;
+  comments: number;
+  shares: number;
+  saves: number;
+  clicks: number;
+  video_views: number;
+}
+
+export interface AnalyticsAccountAvailability {
+  social_account_id: string;
+  profile_id: string;
+  account_name?: string;
+  external_user_id?: string;
+  status: string;
+  post_count: number;
+  last_successful_fetch_at?: string;
+  last_failure_reason?: string;
+}
+
+export interface AnalyticsPlatformDetail {
+  platform: string;
+  period: { start: string; end: string };
+  availability: AnalyticsPlatformAvailability;
+  summary: AnalyticsPlatformSummary;
+  trend: AnalyticsPlatformTrendRow[];
+  accounts: AnalyticsAccountAvailability[];
+  top_posts: AnalyticsPostRow[];
+}
+
+export interface AnalyticsRefreshParams extends AnalyticsPlatformParams {
+  platform?: string;
+  accountId?: string;
+  postId?: string;
+  limit?: number;
+}
+
+export interface AnalyticsRefreshResponse {
+  status: string;
+  matched_count: number;
+  requested_count: number;
+  limit: number;
+  processed_by?: string;
+  filters?: Record<string, unknown>;
+}
+
 // --- Usage / OAuth ---
 
 export interface Usage {

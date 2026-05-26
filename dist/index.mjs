@@ -151,8 +151,57 @@ var HttpClient = class {
     }
     throw lastError || new Error("Request failed after retries");
   }
+  async requestText(method, path, options) {
+    const url = new URL(path, this.baseUrl);
+    if (options?.query) {
+      for (const [key, value] of Object.entries(options.query)) {
+        if (value !== void 0 && value !== null && value !== "") {
+          url.searchParams.set(key, String(value));
+        }
+      }
+    }
+    const headers = {
+      Authorization: `Bearer ${this.apiKey}`,
+      "User-Agent": USER_AGENT,
+      ...options?.headers
+    };
+    let lastError = null;
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        const response = await fetch(url.toString(), {
+          method,
+          headers,
+          signal: AbortSignal.timeout(this.timeout)
+        });
+        if (response.ok) {
+          return await response.text();
+        }
+        if (response.status === 429) {
+          const retryAfter = parseInt(response.headers.get("Retry-After") || "1", 10);
+          if (attempt < MAX_RETRIES) {
+            await sleep(retryAfter * 1e3);
+            continue;
+          }
+          throw new RateLimitError(retryAfter);
+        }
+        const body = await response.json().catch(() => ({}));
+        throw parseApiError(response.status, body);
+      } catch (err) {
+        if (err instanceof RateLimitError && attempt < MAX_RETRIES) {
+          await sleep(err.retryAfter * 1e3);
+          lastError = err;
+          continue;
+        }
+        throw err;
+      }
+    }
+    throw lastError || new Error("Request failed after retries");
+  }
   get(path, query) {
     return this.request("GET", path, { query });
+  }
+  getText(path, query) {
+    return this.requestText("GET", path, { query });
   }
   post(path, body, headers) {
     return this.request("POST", path, { body, headers });
@@ -612,6 +661,34 @@ function buildQuery(params = {}) {
   if (params.status) query.status = params.status;
   return query;
 }
+function buildPostsQuery(params = {}) {
+  return {
+    ...buildQuery(params),
+    account_id: params.accountId,
+    post_id: params.postId,
+    limit: params.limit,
+    cursor: params.cursor,
+    sort: params.sort
+  };
+}
+function buildPlatformQuery(params = {}) {
+  return {
+    from: params.from,
+    to: params.to,
+    profile_id: params.profileId
+  };
+}
+function buildRefreshBody(params = {}) {
+  return {
+    platform: params.platform,
+    profile_id: params.profileId,
+    account_id: params.accountId,
+    post_id: params.postId,
+    from: params.from,
+    to: params.to,
+    limit: params.limit
+  };
+}
 var Analytics = class {
   constructor(http) {
     this.http = http;
@@ -637,6 +714,37 @@ var Analytics = class {
       granularity: params.granularity,
       group_by: params.groupBy
     });
+    return res.data;
+  }
+  /** Paginated post-level analytics rows across UniPost-published content. */
+  async posts(params = {}) {
+    const res = await this.http.get("/v1/analytics/posts", buildPostsQuery(params));
+    return {
+      data: res.data || [],
+      meta: res.meta,
+      nextCursor: res.meta?.next_cursor || res.next_cursor
+    };
+  }
+  /** Export post-level analytics rows as CSV text. */
+  async exportPostsCsv(params = {}) {
+    return this.http.getText("/v1/analytics/posts/export", buildPostsQuery(params));
+  }
+  /** Analytics availability and health by destination platform. */
+  async platforms(params = {}) {
+    const res = await this.http.get("/v1/analytics/platforms", buildPlatformQuery(params));
+    return res.data || [];
+  }
+  /** Detailed analytics for one platform, including summary, trend, accounts, and top posts. */
+  async platform(platform, params = {}) {
+    const res = await this.http.get(
+      `/v1/analytics/platforms/${encodeURIComponent(platform)}`,
+      buildPlatformQuery(params)
+    );
+    return res.data;
+  }
+  /** Mark matching analytics rows stale so background workers refresh platform metrics. */
+  async refresh(params = {}) {
+    const res = await this.http.post("/v1/analytics/refresh", buildRefreshBody(params));
     return res.data;
   }
 };
