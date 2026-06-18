@@ -84,6 +84,15 @@ export type {
   // Usage / OAuth
   Usage,
   OAuthConnectResponse,
+  // Logs
+  LogEntry,
+  LogLevel,
+  LogStatus,
+  LogCategory,
+  LogSource,
+  ListLogsParams,
+  LogStreamParams,
+  LogStreamOptions,
   // Pagination
   PaginatedResponse,
   // Client options

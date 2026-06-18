@@ -10,6 +10,12 @@ export interface HttpClientOptions {
   timeout: number;
 }
 
+export interface SSEEvent<T> {
+  event?: string;
+  id?: string;
+  data: T;
+}
+
 export class HttpClient {
   private readonly apiKey: string;
   private readonly baseUrl: string;
@@ -156,6 +162,118 @@ export class HttpClient {
     }
 
     throw lastError || new Error("Request failed after retries");
+  }
+
+  async *streamSSE<T>(
+    path: string,
+    options?: {
+      query?: Record<string, string | number | boolean | undefined | null>;
+      headers?: Record<string, string>;
+      signal?: AbortSignal;
+    },
+  ): AsyncGenerator<SSEEvent<T>> {
+    const url = new URL(path, this.baseUrl);
+
+    if (options?.query) {
+      for (const [key, value] of Object.entries(options.query)) {
+        if (value !== undefined && value !== null && value !== "") {
+          url.searchParams.set(key, String(value));
+        }
+      }
+    }
+
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${this.apiKey}`,
+      "User-Agent": USER_AGENT,
+      Accept: "text/event-stream",
+      ...options?.headers,
+    };
+
+    const response = await fetch(url.toString(), {
+      method: "GET",
+      headers,
+      signal: options?.signal,
+    });
+
+    if (!response.ok) {
+      const body = (await response.json().catch(() => ({}))) as Parameters<typeof parseApiError>[1];
+      throw parseApiError(response.status, body);
+    }
+    if (!response.body) {
+      throw new Error("SSE response body is not readable");
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let eventName: string | undefined;
+    let eventId: string | undefined;
+    let dataLines: string[] = [];
+
+    const flush = (): SSEEvent<T> | undefined => {
+      if (dataLines.length === 0) {
+        eventName = undefined;
+        eventId = undefined;
+        return undefined;
+      }
+      const event: SSEEvent<T> = {
+        event: eventName,
+        id: eventId,
+        data: JSON.parse(dataLines.join("\n")) as T,
+      };
+      eventName = undefined;
+      eventId = undefined;
+      dataLines = [];
+      return event;
+    };
+
+    const consumeLine = (line: string): SSEEvent<T> | undefined => {
+      if (line.endsWith("\r")) line = line.slice(0, -1);
+      if (line === "") return flush();
+      if (line.startsWith(":")) return undefined;
+
+      const separator = line.indexOf(":");
+      const field = separator === -1 ? line : line.slice(0, separator);
+      const rawValue = separator === -1 ? "" : line.slice(separator + 1);
+      const value = rawValue.startsWith(" ") ? rawValue.slice(1) : rawValue;
+
+      if (field === "event") eventName = value;
+      if (field === "id") eventId = value;
+      if (field === "data") dataLines.push(value);
+      return undefined;
+    };
+
+    let completed = false;
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) {
+          completed = true;
+          break;
+        }
+        buffer += decoder.decode(value, { stream: true });
+        let newline = buffer.indexOf("\n");
+        while (newline !== -1) {
+          const line = buffer.slice(0, newline);
+          buffer = buffer.slice(newline + 1);
+          const event = consumeLine(line);
+          if (event) yield event;
+          newline = buffer.indexOf("\n");
+        }
+      }
+      buffer += decoder.decode();
+      if (buffer) {
+        const event = consumeLine(buffer);
+        if (event) yield event;
+      }
+      const event = flush();
+      if (event) yield event;
+    } finally {
+      if (!completed) {
+        await reader.cancel().catch(() => undefined);
+      }
+      reader.releaseLock();
+    }
   }
 
   get<T>(path: string, query?: Record<string, string | number | boolean | undefined | null>) {

@@ -3,6 +3,11 @@ interface HttpClientOptions {
     baseUrl: string;
     timeout: number;
 }
+interface SSEEvent<T> {
+    event?: string;
+    id?: string;
+    data: T;
+}
 declare class HttpClient {
     private readonly apiKey;
     private readonly baseUrl;
@@ -17,6 +22,11 @@ declare class HttpClient {
         query?: Record<string, string | number | boolean | undefined | null>;
         headers?: Record<string, string>;
     }): Promise<string>;
+    streamSSE<T>(path: string, options?: {
+        query?: Record<string, string | number | boolean | undefined | null>;
+        headers?: Record<string, string>;
+        signal?: AbortSignal;
+    }): AsyncGenerator<SSEEvent<T>>;
     get<T>(path: string, query?: Record<string, string | number | boolean | undefined | null>): Promise<T>;
     getText(path: string, query?: Record<string, string | number | boolean | undefined | null>): Promise<string>;
     post<T>(path: string, body?: unknown, headers?: Record<string, string>): Promise<T>;
@@ -498,6 +508,64 @@ interface Usage {
 interface OAuthConnectResponse {
     auth_url: string;
 }
+type LogLevel = "debug" | "info" | "warn" | "error" | string;
+type LogStatus = "success" | "warning" | "error" | string;
+type LogCategory = "publishing" | "api_request" | "oauth" | "webhook" | "system" | string;
+type LogSource = "api" | "dashboard" | "worker" | "webhook" | "oauth" | string;
+interface LogEntry {
+    id: number;
+    workspace_id: string;
+    ts: string;
+    level: LogLevel;
+    status: LogStatus;
+    category: LogCategory;
+    action: string;
+    source: LogSource;
+    message?: string;
+    request_id?: string;
+    platform?: string;
+    profile_id?: string;
+    social_account_id?: string;
+    post_id?: string;
+    error_code?: string;
+    metadata?: Record<string, unknown> | null;
+    request_payload?: Record<string, unknown> | null;
+    response_payload?: Record<string, unknown> | null;
+}
+interface ListLogsParams {
+    category?: LogCategory;
+    action?: string;
+    source?: LogSource;
+    level?: LogLevel;
+    status?: LogStatus;
+    platform?: string;
+    profileId?: string;
+    socialAccountId?: string;
+    postId?: string;
+    requestId?: string;
+    errorCode?: string;
+    q?: string;
+    from?: string;
+    to?: string;
+    limit?: number;
+    cursor?: string;
+}
+interface LogStreamParams {
+    category?: LogCategory;
+    level?: LogLevel;
+    status?: LogStatus;
+    platform?: string;
+    profileId?: string;
+    socialAccountId?: string;
+    postId?: string;
+    requestId?: string;
+    errorCode?: string;
+    afterId?: number;
+}
+interface LogStreamOptions {
+    lastEventId?: number | string;
+    signal?: AbortSignal;
+}
 interface PaginatedResponse<T> {
     data: T[];
     nextCursor?: string;
@@ -728,6 +796,16 @@ declare class UsageApi {
     get(): Promise<Usage>;
 }
 
+declare class Logs {
+    private readonly http;
+    constructor(http: HttpClient);
+    list(params?: ListLogsParams): Promise<PaginatedResponse<LogEntry> & {
+        nextCursor?: string;
+    }>;
+    get(logId: number | string): Promise<LogEntry>;
+    stream(params?: LogStreamParams, options?: LogStreamOptions): AsyncGenerator<LogEntry>;
+}
+
 /**
  * Official UniPost API client.
  *
@@ -761,6 +839,7 @@ declare class UniPost {
     readonly webhooks: Webhooks;
     readonly oauth: OAuth;
     readonly usage: UsageApi;
+    readonly logs: Logs;
     constructor(options?: UniPostClientOptions);
 }
 
@@ -808,4 +887,4 @@ declare class QuotaError extends UniPostError {
  */
 declare function verifyWebhookSignature(options: VerifyWebhookOptions): Promise<boolean>;
 
-export { type AccountHealth, type AccountStatus, type AnalyticsQueryParams, type AnalyticsRollup, type AnalyticsRollupParams, type ApiKey, type ApiKeyEnvironment, AuthError, type BulkPostError, type BulkPostResult, type ConnectAccountParams, type ConnectSession, type ConnectionType, type CreateApiKeyParams, type CreateConnectSessionParams, type CreatePlatformCredentialParams, type CreatePostParams, type CreatePostPlatformPost, type CreateProfileParams, type CreateWebhookParams, type CreatedApiKey, type DeliveryJob, type GetConnectUrlParams, type Granularity, type GroupBy, type ListAccountsParams, type ListDeliveryJobsParams, type ListPostsParams, type ManagedUser, type MediaUploadRequest, type MediaUploadResponse, NotFoundError, type OAuthConnectResponse, type PaginatedResponse, type Plan, type Platform, type PlatformCredential, PlatformError, type PlatformResult, type Post, type PostAnalyticsItem, type PostPreviewLink, type PostQueueSnapshot, type PostStatus, type Profile, QuotaError, RateLimitError, type SocialAccount, UniPost, type UniPostClientOptions, UniPostError, type UpdatePostParams, type UpdateProfileParams, type UpdateWebhookParams, type UpdateWorkspaceParams, type Usage, ValidationError, type ValidationIssue, type ValidationResult, type VerifyWebhookOptions, type WebhookEvent, type WebhookEventType, type WebhookSubscription, type WebhookSubscriptionSecret, type Workspace, verifyWebhookSignature };
+export { type AccountHealth, type AccountStatus, type AnalyticsQueryParams, type AnalyticsRollup, type AnalyticsRollupParams, type ApiKey, type ApiKeyEnvironment, AuthError, type BulkPostError, type BulkPostResult, type ConnectAccountParams, type ConnectSession, type ConnectionType, type CreateApiKeyParams, type CreateConnectSessionParams, type CreatePlatformCredentialParams, type CreatePostParams, type CreatePostPlatformPost, type CreateProfileParams, type CreateWebhookParams, type CreatedApiKey, type DeliveryJob, type GetConnectUrlParams, type Granularity, type GroupBy, type ListAccountsParams, type ListDeliveryJobsParams, type ListLogsParams, type ListPostsParams, type LogCategory, type LogEntry, type LogLevel, type LogSource, type LogStatus, type LogStreamOptions, type LogStreamParams, type ManagedUser, type MediaUploadRequest, type MediaUploadResponse, NotFoundError, type OAuthConnectResponse, type PaginatedResponse, type Plan, type Platform, type PlatformCredential, PlatformError, type PlatformResult, type Post, type PostAnalyticsItem, type PostPreviewLink, type PostQueueSnapshot, type PostStatus, type Profile, QuotaError, RateLimitError, type SocialAccount, UniPost, type UniPostClientOptions, UniPostError, type UpdatePostParams, type UpdateProfileParams, type UpdateWebhookParams, type UpdateWorkspaceParams, type Usage, ValidationError, type ValidationIssue, type ValidationResult, type VerifyWebhookOptions, type WebhookEvent, type WebhookEventType, type WebhookSubscription, type WebhookSubscriptionSecret, type Workspace, verifyWebhookSignature };

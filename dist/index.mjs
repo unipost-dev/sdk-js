@@ -197,6 +197,100 @@ var HttpClient = class {
     }
     throw lastError || new Error("Request failed after retries");
   }
+  async *streamSSE(path, options) {
+    const url = new URL(path, this.baseUrl);
+    if (options?.query) {
+      for (const [key, value] of Object.entries(options.query)) {
+        if (value !== void 0 && value !== null && value !== "") {
+          url.searchParams.set(key, String(value));
+        }
+      }
+    }
+    const headers = {
+      Authorization: `Bearer ${this.apiKey}`,
+      "User-Agent": USER_AGENT,
+      Accept: "text/event-stream",
+      ...options?.headers
+    };
+    const response = await fetch(url.toString(), {
+      method: "GET",
+      headers,
+      signal: options?.signal
+    });
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}));
+      throw parseApiError(response.status, body);
+    }
+    if (!response.body) {
+      throw new Error("SSE response body is not readable");
+    }
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let eventName;
+    let eventId;
+    let dataLines = [];
+    const flush = () => {
+      if (dataLines.length === 0) {
+        eventName = void 0;
+        eventId = void 0;
+        return void 0;
+      }
+      const event = {
+        event: eventName,
+        id: eventId,
+        data: JSON.parse(dataLines.join("\n"))
+      };
+      eventName = void 0;
+      eventId = void 0;
+      dataLines = [];
+      return event;
+    };
+    const consumeLine = (line) => {
+      if (line.endsWith("\r")) line = line.slice(0, -1);
+      if (line === "") return flush();
+      if (line.startsWith(":")) return void 0;
+      const separator = line.indexOf(":");
+      const field = separator === -1 ? line : line.slice(0, separator);
+      const rawValue = separator === -1 ? "" : line.slice(separator + 1);
+      const value = rawValue.startsWith(" ") ? rawValue.slice(1) : rawValue;
+      if (field === "event") eventName = value;
+      if (field === "id") eventId = value;
+      if (field === "data") dataLines.push(value);
+      return void 0;
+    };
+    let completed = false;
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) {
+          completed = true;
+          break;
+        }
+        buffer += decoder.decode(value, { stream: true });
+        let newline = buffer.indexOf("\n");
+        while (newline !== -1) {
+          const line = buffer.slice(0, newline);
+          buffer = buffer.slice(newline + 1);
+          const event2 = consumeLine(line);
+          if (event2) yield event2;
+          newline = buffer.indexOf("\n");
+        }
+      }
+      buffer += decoder.decode();
+      if (buffer) {
+        const event2 = consumeLine(buffer);
+        if (event2) yield event2;
+      }
+      const event = flush();
+      if (event) yield event;
+    } finally {
+      if (!completed) {
+        await reader.cancel().catch(() => void 0);
+      }
+      reader.releaseLock();
+    }
+  }
   get(path, query) {
     return this.request("GET", path, { query });
   }
@@ -874,6 +968,60 @@ var UsageApi = class {
   }
 };
 
+// src/resources/logs.ts
+function buildQuery2(params = {}) {
+  return {
+    category: params.category,
+    action: "action" in params ? params.action : void 0,
+    source: "source" in params ? params.source : void 0,
+    level: params.level,
+    status: params.status,
+    platform: params.platform,
+    profile_id: params.profileId,
+    social_account_id: params.socialAccountId,
+    post_id: params.postId,
+    request_id: params.requestId,
+    error_code: params.errorCode,
+    q: "q" in params ? params.q : void 0,
+    from: "from" in params ? params.from : void 0,
+    to: "to" in params ? params.to : void 0,
+    limit: "limit" in params ? params.limit : void 0,
+    cursor: "cursor" in params ? params.cursor : void 0,
+    after_id: "afterId" in params ? params.afterId : void 0
+  };
+}
+var Logs = class {
+  constructor(http) {
+    this.http = http;
+  }
+  http;
+  async list(params = {}) {
+    const response = await this.http.get(
+      "/v1/logs",
+      buildQuery2(params)
+    );
+    const nextCursor = response?.meta?.next_cursor ?? response?.nextCursor ?? response?.next_cursor;
+    return { ...response, nextCursor };
+  }
+  async get(logId) {
+    const res = await this.http.get(`/v1/logs/${encodeURIComponent(String(logId))}`);
+    return res.data;
+  }
+  async *stream(params = {}, options = {}) {
+    const headers = {};
+    if (options.lastEventId !== void 0) headers["Last-Event-ID"] = String(options.lastEventId);
+    for await (const event of this.http.streamSSE("/v1/logs/stream", {
+      query: buildQuery2(params),
+      headers,
+      signal: options.signal
+    })) {
+      if (!event.event || event.event === "log.created") {
+        yield event.data;
+      }
+    }
+  }
+};
+
 // src/client.ts
 var DEFAULT_BASE_URL = "https://api.unipost.dev";
 var DEFAULT_TIMEOUT = 3e4;
@@ -894,6 +1042,7 @@ var UniPost = class {
   webhooks;
   oauth;
   usage;
+  logs;
   constructor(options = {}) {
     const apiKey = options.apiKey ?? getEnvVar("UNIPOST_API_KEY");
     if (!apiKey) {
@@ -922,6 +1071,7 @@ var UniPost = class {
     this.webhooks = new Webhooks(http);
     this.oauth = new OAuth(http);
     this.usage = new UsageApi(http);
+    this.logs = new Logs(http);
   }
 };
 function getEnvVar(name) {

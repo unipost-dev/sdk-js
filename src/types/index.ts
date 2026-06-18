@@ -385,6 +385,71 @@ export interface OAuthConnectResponse {
   auth_url: string;
 }
 
+// --- Logs ---
+
+export type LogLevel = "debug" | "info" | "warn" | "error" | string;
+export type LogStatus = "success" | "warning" | "error" | string;
+export type LogCategory = "publishing" | "api_request" | "oauth" | "webhook" | "system" | string;
+export type LogSource = "api" | "dashboard" | "worker" | "webhook" | "oauth" | string;
+
+export interface LogEntry {
+  id: number;
+  workspace_id: string;
+  ts: string;
+  level: LogLevel;
+  status: LogStatus;
+  category: LogCategory;
+  action: string;
+  source: LogSource;
+  message?: string;
+  request_id?: string;
+  platform?: string;
+  profile_id?: string;
+  social_account_id?: string;
+  post_id?: string;
+  error_code?: string;
+  metadata?: Record<string, unknown> | null;
+  request_payload?: Record<string, unknown> | null;
+  response_payload?: Record<string, unknown> | null;
+}
+
+export interface ListLogsParams {
+  category?: LogCategory;
+  action?: string;
+  source?: LogSource;
+  level?: LogLevel;
+  status?: LogStatus;
+  platform?: string;
+  profileId?: string;
+  socialAccountId?: string;
+  postId?: string;
+  requestId?: string;
+  errorCode?: string;
+  q?: string;
+  from?: string;
+  to?: string;
+  limit?: number;
+  cursor?: string;
+}
+
+export interface LogStreamParams {
+  category?: LogCategory;
+  level?: LogLevel;
+  status?: LogStatus;
+  platform?: string;
+  profileId?: string;
+  socialAccountId?: string;
+  postId?: string;
+  requestId?: string;
+  errorCode?: string;
+  afterId?: number;
+}
+
+export interface LogStreamOptions {
+  lastEventId?: number | string;
+  signal?: AbortSignal;
+}
+
 // --- Pagination ---
 
 export interface PaginatedResponse<T> {
