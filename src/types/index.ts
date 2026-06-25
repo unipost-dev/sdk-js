@@ -10,6 +10,11 @@ export type {
 
 export type {
   PostStatus,
+  ErrorSource,
+  ErrorTemporality,
+  RetryState,
+  ProviderError,
+  RetryPolicy,
   Post,
   PlatformResult,
   CreatePostPlatformPost,
