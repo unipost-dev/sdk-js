@@ -81,6 +81,13 @@ export type {
   // Media
   MediaUploadRequest,
   MediaUploadResponse,
+  AudioOverlayMode,
+  AudioOverlayFit,
+  AudioOverlayStatus,
+  AudioOverlayCreateParams,
+  AudioOverlayRequestOptions,
+  AudioOverlayError,
+  AudioOverlayJob,
   // Analytics
   Granularity,
   GroupBy,

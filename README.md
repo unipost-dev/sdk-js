@@ -3,13 +3,14 @@
 Official UniPost API client for JavaScript and TypeScript.
 Post to 7 social platforms with one API call.
 
-## Latest release: v0.4.1
+## Latest release: v0.5.0
 
-Post failure responses now include typed error contract fields.
+Media uploads now support custom audio overlay jobs and optional reserve-time file sizes.
 
-- Read `error_source` and `error_temporality` to distinguish UniPost, worker, platform, and unknown failures.
-- Inspect sanitized `provider_error` details when a platform returns structured metadata.
-- Use `retry_policy.will_retry` and `retry_policy.manual_retry_allowed` instead of parsing `error_message`.
+- Use `client.media.audioOverlays.create(...)` to combine one uploaded video with one uploaded audio file.
+- Poll the job with `client.media.audioOverlays.get(...)`, then publish the returned `outputMediaId`.
+- Omit `sizeBytes` when reserving media if your app cannot know the raw file length up front.
+- Post failure responses also include the typed v0.4.1 error contract fields.
 
 ## Installation
 
@@ -149,13 +150,42 @@ for await (const log of client.logs.stream({ status: 'error', afterId: page.data
 const { mediaId, uploadUrl } = await client.media.upload({
   filename: 'photo.jpg',
   contentType: 'image/jpeg',
-  sizeBytes: 1048576,
+  // sizeBytes is optional; uploadFile calculates it automatically
 })
 
 await fetch(uploadUrl, { method: 'PUT', body: fileBuffer })
 
 // Or upload from file (Node.js)
 const mediaId = await client.media.uploadFile('./photo.jpg')
+```
+
+### Custom Audio Overlay
+
+```typescript
+const job = await client.media.audioOverlays.create({
+  videoMediaId: 'media_video_123',
+  audioMediaId: 'media_audio_456',
+  mode: 'mix',
+  videoVolume: 70,
+  audioVolume: 100,
+  fit: 'trim_to_video',
+}, { idempotencyKey: 'overlay-demo-001' })
+
+let current = job
+while (current.status === 'queued' || current.status === 'processing') {
+  await new Promise((resolve) => setTimeout(resolve, 1500))
+  current = await client.media.audioOverlays.get(job.id)
+}
+
+if (current.status !== 'succeeded') {
+  throw new Error(current.error?.message || 'audio overlay failed')
+}
+
+await client.posts.create({
+  caption: 'Video with custom audio',
+  accountIds: ['sa_tiktok_xxx'],
+  mediaIds: [current.outputMediaId!],
+})
 ```
 
 ### Connect (Managed Users)

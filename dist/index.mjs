@@ -99,7 +99,7 @@ function parseApiError(status, body) {
 
 // src/http.ts
 var MAX_RETRIES = 2;
-var SDK_VERSION = "0.4.1";
+var SDK_VERSION = "0.5.0";
 var USER_AGENT = `@unipost/sdk/${SDK_VERSION}`;
 var HttpClient = class {
   apiKey;
@@ -691,7 +691,11 @@ var MIME_TYPES = {
   webp: "image/webp",
   mp4: "video/mp4",
   mov: "video/quicktime",
-  webm: "video/webm"
+  webm: "video/webm",
+  mp3: "audio/mpeg",
+  wav: "audio/wav",
+  aac: "audio/aac",
+  m4a: "audio/mp4"
 };
 function normalize(data) {
   if (!data) return data ?? void 0;
@@ -701,18 +705,66 @@ function normalize(data) {
     uploadUrl: data.upload_url ?? data.uploadUrl
   };
 }
-var Media = class {
+function normalizeAudioOverlayJob(data) {
+  if (!data) return data ?? void 0;
+  return {
+    ...data,
+    videoMediaId: data.video_media_id ?? data.videoMediaId,
+    audioMediaId: data.audio_media_id ?? data.audioMediaId,
+    outputMediaId: data.output_media_id ?? data.outputMediaId ?? null,
+    createdAt: data.created_at ?? data.createdAt,
+    startedAt: data.started_at ?? data.startedAt ?? null,
+    completedAt: data.completed_at ?? data.completedAt ?? null
+  };
+}
+function audioOverlayBody(params) {
+  const body = {
+    video_media_id: params.videoMediaId,
+    audio_media_id: params.audioMediaId
+  };
+  if (params.mode !== void 0) body.mode = params.mode;
+  if (params.videoVolume !== void 0) body.video_volume = params.videoVolume;
+  if (params.audioVolume !== void 0) body.audio_volume = params.audioVolume;
+  if (params.audioStartMs !== void 0) body.audio_start_ms = params.audioStartMs;
+  if (params.fit !== void 0) body.fit = params.fit;
+  return body;
+}
+var AudioOverlays = class {
   constructor(http) {
     this.http = http;
   }
   http;
+  /** Create an async job that combines uploaded video and audio media. */
+  async create(params, options = {}) {
+    const headers = {};
+    if (options.idempotencyKey) headers["Idempotency-Key"] = options.idempotencyKey;
+    const res = await this.http.post(
+      "/v1/media/audio-overlays",
+      audioOverlayBody(params),
+      headers
+    );
+    return normalizeAudioOverlayJob(res.data);
+  }
+  /** Fetch an audio overlay job by ID. */
+  async get(jobId) {
+    const res = await this.http.get(`/v1/media/audio-overlays/${jobId}`);
+    return normalizeAudioOverlayJob(res.data);
+  }
+};
+var Media = class {
+  constructor(http) {
+    this.http = http;
+    this.audioOverlays = new AudioOverlays(http);
+  }
+  http;
+  audioOverlays;
   /** Request a presigned upload URL. */
   async upload(params) {
     const body = {
       filename: params.filename,
-      content_type: params.contentType,
-      size_bytes: params.sizeBytes
+      content_type: params.contentType
     };
+    if (params.sizeBytes !== void 0) body.size_bytes = params.sizeBytes;
     if (params.contentHash) body.content_hash = params.contentHash;
     const res = await this.http.post("/v1/media", body);
     return normalize(res.data);

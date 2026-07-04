@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.0 (2026-07-03)
+
+- Add `client.media.audioOverlays.create(...)` and `get(...)` for custom audio overlay processing jobs
+- Allow media reservations without `sizeBytes`; UniPost can hydrate size after upload
+- Add audio MIME type helpers for local file uploads
+- Include the v0.4.1 typed post failure error contract updates
+
 ## 0.3.0 (2026-05-26)
 
 - Add analytics explorer helpers: `client.analytics.posts`, `exportPostsCsv`, `platforms`, `platform`, and `refresh`
