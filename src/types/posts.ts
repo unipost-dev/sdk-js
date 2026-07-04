@@ -15,6 +15,49 @@ export type PostStatus =
   | "canceled"
   | string;
 
+export type ErrorSource =
+  | "unipost"
+  | "platform"
+  | "worker"
+  | "unknown"
+  | (string & {});
+
+export type ErrorTemporality = "temporary" | "permanent" | "unknown" | (string & {});
+
+export type RetryState =
+  | "not_retriable"
+  | "scheduled"
+  | "running"
+  | "exhausted"
+  | "manual_only"
+  | "unknown"
+  | (string & {});
+
+export interface ProviderError {
+  provider?: string;
+  http_status?: number;
+  code?: string;
+  subcode?: string;
+  type?: string;
+  reason?: string;
+  domain?: string;
+  quota_limit?: string;
+  quota_location?: string;
+  is_transient?: boolean;
+}
+
+export interface RetryPolicy {
+  is_retriable: boolean;
+  will_retry: boolean;
+  retry_state: RetryState;
+  next_run_at?: string;
+  attempts_made?: number;
+  max_attempts?: number;
+  attempts_remaining?: number;
+  manual_retry_allowed: boolean;
+  reason?: string;
+}
+
 export interface PlatformResult {
   id?: string;
   social_account_id: string;
@@ -25,6 +68,10 @@ export interface PlatformResult {
   external_id?: string;
   url?: string;
   error_message?: string;
+  error_source?: ErrorSource;
+  error_temporality?: ErrorTemporality;
+  provider_error?: ProviderError | null;
+  retry_policy?: RetryPolicy | null;
   published_at?: string;
   warnings?: string[];
 }

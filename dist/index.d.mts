@@ -70,6 +70,32 @@ interface ConnectAccountParams {
 }
 
 type PostStatus = "draft" | "scheduled" | "queued" | "publishing" | "dispatching" | "retrying" | "processing" | "published" | "partial" | "failed" | "cancelled" | "canceled" | string;
+type ErrorSource = "unipost" | "platform" | "worker" | "unknown" | (string & {});
+type ErrorTemporality = "temporary" | "permanent" | "unknown" | (string & {});
+type RetryState = "not_retriable" | "scheduled" | "running" | "exhausted" | "manual_only" | "unknown" | (string & {});
+interface ProviderError {
+    provider?: string;
+    http_status?: number;
+    code?: string;
+    subcode?: string;
+    type?: string;
+    reason?: string;
+    domain?: string;
+    quota_limit?: string;
+    quota_location?: string;
+    is_transient?: boolean;
+}
+interface RetryPolicy {
+    is_retriable: boolean;
+    will_retry: boolean;
+    retry_state: RetryState;
+    next_run_at?: string;
+    attempts_made?: number;
+    max_attempts?: number;
+    attempts_remaining?: number;
+    manual_retry_allowed: boolean;
+    reason?: string;
+}
 interface PlatformResult {
     id?: string;
     social_account_id: string;
@@ -80,6 +106,10 @@ interface PlatformResult {
     external_id?: string;
     url?: string;
     error_message?: string;
+    error_source?: ErrorSource;
+    error_temporality?: ErrorTemporality;
+    provider_error?: ProviderError | null;
+    retry_policy?: RetryPolicy | null;
     published_at?: string;
     warnings?: string[];
 }
@@ -346,7 +376,7 @@ interface ManagedUser {
 interface MediaUploadRequest {
     filename: string;
     contentType: string;
-    sizeBytes: number;
+    sizeBytes?: number;
     contentHash?: string;
 }
 interface MediaUploadResponse {
@@ -361,6 +391,45 @@ interface MediaUploadResponse {
     download_url?: string;
     expires_at?: string;
     created_at?: string;
+}
+type AudioOverlayMode = "mix" | "replace" | string;
+type AudioOverlayFit = "trim_to_video" | "loop_to_video" | string;
+type AudioOverlayStatus = "queued" | "processing" | "succeeded" | "failed" | string;
+interface AudioOverlayCreateParams {
+    videoMediaId: string;
+    audioMediaId: string;
+    mode?: AudioOverlayMode;
+    videoVolume?: number;
+    audioVolume?: number;
+    audioStartMs?: number;
+    fit?: AudioOverlayFit;
+}
+interface AudioOverlayRequestOptions {
+    idempotencyKey?: string;
+}
+interface AudioOverlayError {
+    code: string;
+    message: string;
+    retryable: boolean;
+}
+interface AudioOverlayJob {
+    id: string;
+    status: AudioOverlayStatus;
+    video_media_id?: string;
+    audio_media_id?: string;
+    output_media_id?: string | null;
+    videoMediaId?: string;
+    audioMediaId?: string;
+    outputMediaId?: string | null;
+    mode: AudioOverlayMode;
+    fit: AudioOverlayFit;
+    created_at?: string;
+    started_at?: string | null;
+    completed_at?: string | null;
+    createdAt?: string;
+    startedAt?: string | null;
+    completedAt?: string | null;
+    error?: AudioOverlayError | null;
 }
 type Granularity = "day" | "week" | "month" | string;
 type GroupBy = "platform" | "social_account_id" | "status" | "external_user_id" | string;
@@ -712,8 +781,17 @@ declare class DeliveryJobs {
     cancel(jobId: string): Promise<DeliveryJob>;
 }
 
+declare class AudioOverlays {
+    private readonly http;
+    constructor(http: HttpClient);
+    /** Create an async job that combines uploaded video and audio media. */
+    create(params: AudioOverlayCreateParams, options?: AudioOverlayRequestOptions): Promise<AudioOverlayJob>;
+    /** Fetch an audio overlay job by ID. */
+    get(jobId: string): Promise<AudioOverlayJob>;
+}
 declare class Media {
     private readonly http;
+    readonly audioOverlays: AudioOverlays;
     constructor(http: HttpClient);
     /** Request a presigned upload URL. */
     upload(params: MediaUploadRequest): Promise<MediaUploadResponse>;
@@ -843,40 +921,50 @@ declare class UniPost {
     constructor(options?: UniPostClientOptions);
 }
 
+interface ErrorContract {
+    error_source?: ErrorSource;
+    error_temporality?: ErrorTemporality;
+    provider_error?: ProviderError | null;
+    retry_policy?: RetryPolicy | null;
+}
 /**
  * Base error class for all UniPost API errors.
  */
 declare class UniPostError extends Error {
     readonly status: number;
     readonly code: string;
-    constructor(message: string, status: number, code: string);
+    readonly error_source?: ErrorSource;
+    readonly error_temporality?: ErrorTemporality;
+    readonly provider_error?: ProviderError | null;
+    readonly retry_policy?: RetryPolicy | null;
+    constructor(message: string, status: number, code: string, contract?: ErrorContract);
 }
 /** 401 - API key invalid or expired. */
 declare class AuthError extends UniPostError {
-    constructor(message?: string);
+    constructor(message?: string, contract?: ErrorContract);
 }
 /** 404 - Resource not found. */
 declare class NotFoundError extends UniPostError {
-    constructor(message?: string);
+    constructor(message?: string, contract?: ErrorContract);
 }
 /** 422 - Validation error. */
 declare class ValidationError extends UniPostError {
     readonly errors: Record<string, string[]>;
-    constructor(message?: string, errors?: Record<string, string[]>);
+    constructor(message?: string, errors?: Record<string, string[]>, contract?: ErrorContract);
 }
 /** 429 - Rate limit exceeded. */
 declare class RateLimitError extends UniPostError {
     readonly retryAfter: number;
-    constructor(retryAfter: number, message?: string);
+    constructor(retryAfter: number, message?: string, contract?: ErrorContract);
 }
 /** Platform-side error (e.g. Twitter rejected the post). */
 declare class PlatformError extends UniPostError {
     readonly platform: string;
-    constructor(message: string, platform: string);
+    constructor(message: string, platform: string, contract?: ErrorContract);
 }
 /** Monthly quota exceeded. */
 declare class QuotaError extends UniPostError {
-    constructor(message?: string);
+    constructor(message?: string, contract?: ErrorContract);
 }
 
 /**
@@ -887,4 +975,4 @@ declare class QuotaError extends UniPostError {
  */
 declare function verifyWebhookSignature(options: VerifyWebhookOptions): Promise<boolean>;
 
-export { type AccountHealth, type AccountStatus, type AnalyticsQueryParams, type AnalyticsRollup, type AnalyticsRollupParams, type ApiKey, type ApiKeyEnvironment, AuthError, type BulkPostError, type BulkPostResult, type ConnectAccountParams, type ConnectSession, type ConnectionType, type CreateApiKeyParams, type CreateConnectSessionParams, type CreatePlatformCredentialParams, type CreatePostParams, type CreatePostPlatformPost, type CreateProfileParams, type CreateWebhookParams, type CreatedApiKey, type DeliveryJob, type GetConnectUrlParams, type Granularity, type GroupBy, type ListAccountsParams, type ListDeliveryJobsParams, type ListLogsParams, type ListPostsParams, type LogCategory, type LogEntry, type LogLevel, type LogSource, type LogStatus, type LogStreamOptions, type LogStreamParams, type ManagedUser, type MediaUploadRequest, type MediaUploadResponse, NotFoundError, type OAuthConnectResponse, type PaginatedResponse, type Plan, type Platform, type PlatformCredential, PlatformError, type PlatformResult, type Post, type PostAnalyticsItem, type PostPreviewLink, type PostQueueSnapshot, type PostStatus, type Profile, QuotaError, RateLimitError, type SocialAccount, UniPost, type UniPostClientOptions, UniPostError, type UpdatePostParams, type UpdateProfileParams, type UpdateWebhookParams, type UpdateWorkspaceParams, type Usage, ValidationError, type ValidationIssue, type ValidationResult, type VerifyWebhookOptions, type WebhookEvent, type WebhookEventType, type WebhookSubscription, type WebhookSubscriptionSecret, type Workspace, verifyWebhookSignature };
+export { type AccountHealth, type AccountStatus, type AnalyticsQueryParams, type AnalyticsRollup, type AnalyticsRollupParams, type ApiKey, type ApiKeyEnvironment, type AudioOverlayCreateParams, type AudioOverlayError, type AudioOverlayFit, type AudioOverlayJob, type AudioOverlayMode, type AudioOverlayRequestOptions, type AudioOverlayStatus, AuthError, type BulkPostError, type BulkPostResult, type ConnectAccountParams, type ConnectSession, type ConnectionType, type CreateApiKeyParams, type CreateConnectSessionParams, type CreatePlatformCredentialParams, type CreatePostParams, type CreatePostPlatformPost, type CreateProfileParams, type CreateWebhookParams, type CreatedApiKey, type DeliveryJob, type ErrorContract, type ErrorSource, type ErrorTemporality, type GetConnectUrlParams, type Granularity, type GroupBy, type ListAccountsParams, type ListDeliveryJobsParams, type ListLogsParams, type ListPostsParams, type LogCategory, type LogEntry, type LogLevel, type LogSource, type LogStatus, type LogStreamOptions, type LogStreamParams, type ManagedUser, type MediaUploadRequest, type MediaUploadResponse, NotFoundError, type OAuthConnectResponse, type PaginatedResponse, type Plan, type Platform, type PlatformCredential, PlatformError, type PlatformResult, type Post, type PostAnalyticsItem, type PostPreviewLink, type PostQueueSnapshot, type PostStatus, type Profile, type ProviderError, QuotaError, RateLimitError, type RetryPolicy, type RetryState, type SocialAccount, UniPost, type UniPostClientOptions, UniPostError, type UpdatePostParams, type UpdateProfileParams, type UpdateWebhookParams, type UpdateWorkspaceParams, type Usage, ValidationError, type ValidationIssue, type ValidationResult, type VerifyWebhookOptions, type WebhookEvent, type WebhookEventType, type WebhookSubscription, type WebhookSubscriptionSecret, type Workspace, verifyWebhookSignature };

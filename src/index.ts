@@ -11,6 +11,7 @@ export {
   PlatformError,
   QuotaError,
 } from "./errors.js";
+export type { ErrorContract } from "./errors.js";
 
 // Webhook signature verification
 export { verifyWebhookSignature } from "./webhook.js";
@@ -43,6 +44,11 @@ export type {
   Plan,
   // Posts
   PostStatus,
+  ErrorSource,
+  ErrorTemporality,
+  RetryState,
+  ProviderError,
+  RetryPolicy,
   Post,
   PlatformResult,
   CreatePostPlatformPost,
@@ -75,6 +81,13 @@ export type {
   // Media
   MediaUploadRequest,
   MediaUploadResponse,
+  AudioOverlayMode,
+  AudioOverlayFit,
+  AudioOverlayStatus,
+  AudioOverlayCreateParams,
+  AudioOverlayRequestOptions,
+  AudioOverlayError,
+  AudioOverlayJob,
   // Analytics
   Granularity,
   GroupBy,

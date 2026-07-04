@@ -9,83 +9,97 @@ var __require = /* @__PURE__ */ ((x) => typeof require !== "undefined" ? require
 var UniPostError = class extends Error {
   status;
   code;
-  constructor(message, status, code) {
+  error_source;
+  error_temporality;
+  provider_error;
+  retry_policy;
+  constructor(message, status, code, contract = {}) {
     super(message);
     this.name = "UniPostError";
     this.status = status;
     this.code = code;
+    this.error_source = contract.error_source;
+    this.error_temporality = contract.error_temporality;
+    this.provider_error = contract.provider_error;
+    this.retry_policy = contract.retry_policy;
   }
 };
 var AuthError = class extends UniPostError {
-  constructor(message = "Authentication failed") {
-    super(message, 401, "auth_error");
+  constructor(message = "Authentication failed", contract = {}) {
+    super(message, 401, "auth_error", contract);
     this.name = "AuthError";
   }
 };
 var NotFoundError = class extends UniPostError {
-  constructor(message = "Resource not found") {
-    super(message, 404, "not_found");
+  constructor(message = "Resource not found", contract = {}) {
+    super(message, 404, "not_found", contract);
     this.name = "NotFoundError";
   }
 };
 var ValidationError = class extends UniPostError {
   errors;
-  constructor(message = "Validation failed", errors = {}) {
-    super(message, 422, "validation_error");
+  constructor(message = "Validation failed", errors = {}, contract = {}) {
+    super(message, 422, "validation_error", contract);
     this.name = "ValidationError";
     this.errors = errors;
   }
 };
 var RateLimitError = class extends UniPostError {
   retryAfter;
-  constructor(retryAfter, message = "Rate limit exceeded") {
-    super(message, 429, "rate_limit");
+  constructor(retryAfter, message = "Rate limit exceeded", contract = {}) {
+    super(message, 429, "rate_limit", contract);
     this.name = "RateLimitError";
     this.retryAfter = retryAfter;
   }
 };
 var PlatformError = class extends UniPostError {
   platform;
-  constructor(message, platform) {
-    super(message, 502, "platform_error");
+  constructor(message, platform, contract = {}) {
+    super(message, 502, "platform_error", contract);
     this.name = "PlatformError";
     this.platform = platform;
   }
 };
 var QuotaError = class extends UniPostError {
-  constructor(message = "Monthly quota exceeded") {
-    super(message, 403, "quota_exceeded");
+  constructor(message = "Monthly quota exceeded", contract = {}) {
+    super(message, 403, "quota_exceeded", contract);
     this.name = "QuotaError";
   }
 };
 function parseApiError(status, body) {
   const msg = body?.error?.message || "Unknown API error";
   const code = body?.error?.normalized_code || body?.error?.code || "unknown";
+  const contract = {
+    error_source: body?.error?.error_source,
+    error_temporality: body?.error?.error_temporality,
+    provider_error: body?.error?.provider_error,
+    retry_policy: body?.error?.retry_policy
+  };
   switch (status) {
     case 401:
-      return new AuthError(msg);
+      return new AuthError(msg, contract);
     case 404:
-      return new NotFoundError(msg);
+      return new NotFoundError(msg, contract);
     case 422:
-      return new ValidationError(msg, body?.error?.errors || {});
+      return new ValidationError(msg, body?.error?.errors || {}, contract);
     case 429: {
       const retryAfter = parseInt(String(body?.error?.retry_after ?? "1"), 10);
-      return new RateLimitError(retryAfter, msg);
+      return new RateLimitError(retryAfter, msg, contract);
     }
     case 403:
-      if (code === "quota_exceeded") return new QuotaError(msg);
-      return new UniPostError(msg, status, code);
+      if (code === "quota_exceeded") return new QuotaError(msg, contract);
+      return new UniPostError(msg, status, code, contract);
     case 502:
-      if (body?.error?.platform) return new PlatformError(msg, body.error.platform);
-      return new UniPostError(msg, status, code);
+      if (body?.error?.platform) return new PlatformError(msg, body.error.platform, contract);
+      return new UniPostError(msg, status, code, contract);
     default:
-      return new UniPostError(msg, status, code);
+      return new UniPostError(msg, status, code, contract);
   }
 }
 
 // src/http.ts
 var MAX_RETRIES = 2;
-var SDK_VERSION = "0.4.0";
+var SDK_VERSION = "0.5.0";
 var USER_AGENT = `@unipost/sdk/${SDK_VERSION}`;
 var HttpClient = class {
   apiKey;
@@ -677,7 +691,11 @@ var MIME_TYPES = {
   webp: "image/webp",
   mp4: "video/mp4",
   mov: "video/quicktime",
-  webm: "video/webm"
+  webm: "video/webm",
+  mp3: "audio/mpeg",
+  wav: "audio/wav",
+  aac: "audio/aac",
+  m4a: "audio/mp4"
 };
 function normalize(data) {
   if (!data) return data ?? void 0;
@@ -687,18 +705,66 @@ function normalize(data) {
     uploadUrl: data.upload_url ?? data.uploadUrl
   };
 }
-var Media = class {
+function normalizeAudioOverlayJob(data) {
+  if (!data) return data ?? void 0;
+  return {
+    ...data,
+    videoMediaId: data.video_media_id ?? data.videoMediaId,
+    audioMediaId: data.audio_media_id ?? data.audioMediaId,
+    outputMediaId: data.output_media_id ?? data.outputMediaId ?? null,
+    createdAt: data.created_at ?? data.createdAt,
+    startedAt: data.started_at ?? data.startedAt ?? null,
+    completedAt: data.completed_at ?? data.completedAt ?? null
+  };
+}
+function audioOverlayBody(params) {
+  const body = {
+    video_media_id: params.videoMediaId,
+    audio_media_id: params.audioMediaId
+  };
+  if (params.mode !== void 0) body.mode = params.mode;
+  if (params.videoVolume !== void 0) body.video_volume = params.videoVolume;
+  if (params.audioVolume !== void 0) body.audio_volume = params.audioVolume;
+  if (params.audioStartMs !== void 0) body.audio_start_ms = params.audioStartMs;
+  if (params.fit !== void 0) body.fit = params.fit;
+  return body;
+}
+var AudioOverlays = class {
   constructor(http) {
     this.http = http;
   }
   http;
+  /** Create an async job that combines uploaded video and audio media. */
+  async create(params, options = {}) {
+    const headers = {};
+    if (options.idempotencyKey) headers["Idempotency-Key"] = options.idempotencyKey;
+    const res = await this.http.post(
+      "/v1/media/audio-overlays",
+      audioOverlayBody(params),
+      headers
+    );
+    return normalizeAudioOverlayJob(res.data);
+  }
+  /** Fetch an audio overlay job by ID. */
+  async get(jobId) {
+    const res = await this.http.get(`/v1/media/audio-overlays/${jobId}`);
+    return normalizeAudioOverlayJob(res.data);
+  }
+};
+var Media = class {
+  constructor(http) {
+    this.http = http;
+    this.audioOverlays = new AudioOverlays(http);
+  }
+  http;
+  audioOverlays;
   /** Request a presigned upload URL. */
   async upload(params) {
     const body = {
       filename: params.filename,
-      content_type: params.contentType,
-      size_bytes: params.sizeBytes
+      content_type: params.contentType
     };
+    if (params.sizeBytes !== void 0) body.size_bytes = params.sizeBytes;
     if (params.contentHash) body.content_hash = params.contentHash;
     const res = await this.http.post("/v1/media", body);
     return normalize(res.data);

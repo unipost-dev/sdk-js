@@ -10,6 +10,11 @@ export type {
 
 export type {
   PostStatus,
+  ErrorSource,
+  ErrorTemporality,
+  RetryState,
+  ProviderError,
+  RetryPolicy,
   Post,
   PlatformResult,
   CreatePostPlatformPost,
@@ -173,7 +178,7 @@ export interface ManagedUser {
 export interface MediaUploadRequest {
   filename: string;
   contentType: string;
-  sizeBytes: number;
+  sizeBytes?: number;
   contentHash?: string;
 }
 
@@ -189,6 +194,50 @@ export interface MediaUploadResponse {
   download_url?: string;
   expires_at?: string;
   created_at?: string;
+}
+
+export type AudioOverlayMode = "mix" | "replace" | string;
+export type AudioOverlayFit = "trim_to_video" | "loop_to_video" | string;
+export type AudioOverlayStatus = "queued" | "processing" | "succeeded" | "failed" | string;
+
+export interface AudioOverlayCreateParams {
+  videoMediaId: string;
+  audioMediaId: string;
+  mode?: AudioOverlayMode;
+  videoVolume?: number;
+  audioVolume?: number;
+  audioStartMs?: number;
+  fit?: AudioOverlayFit;
+}
+
+export interface AudioOverlayRequestOptions {
+  idempotencyKey?: string;
+}
+
+export interface AudioOverlayError {
+  code: string;
+  message: string;
+  retryable: boolean;
+}
+
+export interface AudioOverlayJob {
+  id: string;
+  status: AudioOverlayStatus;
+  video_media_id?: string;
+  audio_media_id?: string;
+  output_media_id?: string | null;
+  videoMediaId?: string;
+  audioMediaId?: string;
+  outputMediaId?: string | null;
+  mode: AudioOverlayMode;
+  fit: AudioOverlayFit;
+  created_at?: string;
+  started_at?: string | null;
+  completed_at?: string | null;
+  createdAt?: string;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  error?: AudioOverlayError | null;
 }
 
 // --- Analytics ---
