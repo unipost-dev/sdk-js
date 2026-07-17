@@ -240,6 +240,54 @@ export interface AudioOverlayJob {
   error?: AudioOverlayError | null;
 }
 
+export type GifConversionStatus = "queued" | "processing" | "succeeded" | "failed" | string;
+
+export interface GifConversionCreateParams {
+  gifMediaId: string;
+  backgroundColor?: string;
+}
+
+export interface GifConversionRequestOptions {
+  idempotencyKey?: string;
+}
+
+export interface GifConversionWaitOptions {
+  pollIntervalMs?: number;
+  timeoutMs?: number;
+  signal?: AbortSignal;
+}
+
+export interface GifConversionJobError {
+  code: string;
+  message: string;
+  retryable: boolean;
+}
+
+export interface GifConversionJob {
+  id: string;
+  kind: "gif_to_mp4" | string;
+  status: GifConversionStatus;
+  gif_media_id?: string;
+  gifMediaId?: string;
+  background_color?: string;
+  backgroundColor?: string;
+  output_profile?: string;
+  outputProfile?: string;
+  output_media_id?: string | null;
+  outputMediaId?: string | null;
+  created_at?: string;
+  createdAt?: string;
+  started_at?: string | null;
+  startedAt?: string | null;
+  completed_at?: string | null;
+  completedAt?: string | null;
+  error?: GifConversionJobError | null;
+}
+
+export interface UploadAndConvertGifOptions extends GifConversionRequestOptions, GifConversionWaitOptions {
+  backgroundColor?: string;
+}
+
 // --- Analytics ---
 
 export type Granularity = "day" | "week" | "month" | string;

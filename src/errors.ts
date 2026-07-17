@@ -96,6 +96,19 @@ export class QuotaError extends UniPostError {
   }
 }
 
+/** A GIF conversion job reached the terminal failed state. */
+export class GifConversionError extends Error {
+  readonly code: string;
+  readonly retryable: boolean;
+
+  constructor(code: string, message: string, retryable: boolean) {
+    super(message);
+    this.name = "GifConversionError";
+    this.code = code;
+    this.retryable = retryable;
+  }
+}
+
 interface ApiErrorBody {
   error?: {
     code?: string;

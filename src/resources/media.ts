@@ -5,7 +5,13 @@ import type {
   AudioOverlayRequestOptions,
   MediaUploadRequest,
   MediaUploadResponse,
+  GifConversionCreateParams,
+  GifConversionJob,
+  GifConversionRequestOptions,
+  GifConversionWaitOptions,
+  UploadAndConvertGifOptions,
 } from "../types/index.js";
+import { GifConversionError } from "../errors.js";
 
 const MIME_TYPES: Record<string, string> = {
   jpg: "image/jpeg",
@@ -57,6 +63,34 @@ function audioOverlayBody(params: AudioOverlayCreateParams): Record<string, unkn
   return body;
 }
 
+function normalizeGifConversionJob(data: GifConversionJob): GifConversionJob {
+  return {
+    ...data,
+    gifMediaId: data.gif_media_id ?? data.gifMediaId,
+    backgroundColor: data.background_color ?? data.backgroundColor,
+    outputProfile: data.output_profile ?? data.outputProfile,
+    outputMediaId: data.output_media_id ?? data.outputMediaId ?? null,
+    createdAt: data.created_at ?? data.createdAt,
+    startedAt: data.started_at ?? data.startedAt ?? null,
+    completedAt: data.completed_at ?? data.completedAt ?? null,
+  };
+}
+
+function abortError(): Error {
+  return new DOMException("GIF conversion polling was aborted", "AbortError");
+}
+
+function wait(ms: number, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) return Promise.reject(abortError());
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(resolve, ms);
+    signal?.addEventListener("abort", () => {
+      clearTimeout(timer);
+      reject(abortError());
+    }, { once: true });
+  });
+}
+
 export class AudioOverlays {
   constructor(private readonly http: HttpClient) {}
 
@@ -82,11 +116,69 @@ export class AudioOverlays {
   }
 }
 
+export class GifConversions {
+  constructor(private readonly http: HttpClient, private readonly media: Media) {}
+
+  async create(
+    params: GifConversionCreateParams,
+    options: GifConversionRequestOptions = {},
+  ): Promise<GifConversionJob> {
+    const headers: Record<string, string> = {};
+    if (options.idempotencyKey) headers["Idempotency-Key"] = options.idempotencyKey;
+    const body: Record<string, unknown> = { gif_media_id: params.gifMediaId };
+    if (params.backgroundColor !== undefined) body.background_color = params.backgroundColor;
+    const res = await this.http.post<{ data: GifConversionJob }>(
+      "/v1/media/gif-conversions", body, headers,
+    );
+    return normalizeGifConversionJob(res.data);
+  }
+
+  async get(conversionId: string): Promise<GifConversionJob> {
+    const res = await this.http.get<{ data: GifConversionJob }>(
+      `/v1/media/gif-conversions/${conversionId}`,
+    );
+    return normalizeGifConversionJob(res.data);
+  }
+
+  async wait(conversionId: string, options: GifConversionWaitOptions = {}): Promise<GifConversionJob> {
+    const pollIntervalMs = options.pollIntervalMs ?? 2_000;
+    const timeoutMs = options.timeoutMs ?? 5 * 60_000;
+    const deadline = Date.now() + timeoutMs;
+    while (true) {
+      if (options.signal?.aborted) throw abortError();
+      const job = await this.get(conversionId);
+      if (job.status === "succeeded") return job;
+      if (job.status === "failed") {
+        const error = job.error ?? {
+          code: "gif_conversion_failed",
+          message: "GIF conversion failed",
+          retryable: false,
+        };
+        throw new GifConversionError(error.code, error.message, error.retryable);
+      }
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) throw new Error(`Timed out waiting for GIF conversion ${conversionId}`);
+      await wait(Math.min(pollIntervalMs, remaining), options.signal);
+    }
+  }
+
+  async uploadAndConvert(filePath: string, options: UploadAndConvertGifOptions = {}): Promise<GifConversionJob> {
+    const gifMediaId = await this.media.uploadFile(filePath);
+    const created = await this.create(
+      { gifMediaId, backgroundColor: options.backgroundColor },
+      { idempotencyKey: options.idempotencyKey ?? crypto.randomUUID() },
+    );
+    return this.wait(created.id, options);
+  }
+}
+
 export class Media {
   readonly audioOverlays: AudioOverlays;
+  readonly gifConversions: GifConversions;
 
   constructor(private readonly http: HttpClient) {
     this.audioOverlays = new AudioOverlays(http);
+    this.gifConversions = new GifConversions(http, this);
   }
 
   /** Request a presigned upload URL. */
@@ -109,6 +201,22 @@ export class Media {
 
   async delete(mediaId: string): Promise<void> {
     await this.http.delete(`/v1/media/${mediaId}`);
+  }
+
+  createGifConversion(params: GifConversionCreateParams, options?: GifConversionRequestOptions) {
+    return this.gifConversions.create(params, options);
+  }
+
+  getGifConversion(conversionId: string) {
+    return this.gifConversions.get(conversionId);
+  }
+
+  waitForGifConversion(conversionId: string, options?: GifConversionWaitOptions) {
+    return this.gifConversions.wait(conversionId, options);
+  }
+
+  uploadAndConvertGif(filePath: string, options?: UploadAndConvertGifOptions) {
+    return this.gifConversions.uploadAndConvert(filePath, options);
   }
 
   /**

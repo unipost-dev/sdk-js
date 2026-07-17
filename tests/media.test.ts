@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { UniPost } from "../src/index.js";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { GifConversionError, UniPost } from "../src/index.js";
 
 const mockFetch = vi.fn();
 vi.stubGlobal("fetch", mockFetch);
@@ -115,5 +118,115 @@ describe("Media", () => {
     expect(job.outputMediaId).toBe("media_output_1");
     expect(job.completedAt).toBe("2026-07-03T12:00:20Z");
     expect(mockFetch.mock.calls[0][0]).toContain("/v1/media/audio-overlays/mpj_1");
+  });
+
+  it("creates and gets typed GIF conversion jobs", async () => {
+    mockFetch
+      .mockResolvedValueOnce(jsonResponse({ data: {
+        id: "mpj_gif_1", kind: "gif_to_mp4", status: "queued",
+        gif_media_id: "media_gif_1", background_color: "#00FFAA",
+        output_profile: "universal_mp4_v1", output_media_id: null,
+        created_at: "2026-07-17T12:00:00Z", error: null,
+      } }, 202))
+      .mockResolvedValueOnce(jsonResponse({ data: {
+        id: "mpj_gif_1", kind: "gif_to_mp4", status: "succeeded",
+        gif_media_id: "media_gif_1", background_color: "#00FFAA",
+        output_profile: "universal_mp4_v1", output_media_id: "media_mp4_1",
+        created_at: "2026-07-17T12:00:00Z", error: null,
+      } }));
+
+    const created = await client.media.createGifConversion(
+      { gifMediaId: "media_gif_1", backgroundColor: "#00ffaa" },
+      { idempotencyKey: "gif-1" },
+    );
+    const fetched = await client.media.getGifConversion(created.id);
+
+    expect(created.gifMediaId).toBe("media_gif_1");
+    expect(fetched.outputMediaId).toBe("media_mp4_1");
+    expect(mockFetch.mock.calls[0][1].headers["Idempotency-Key"]).toBe("gif-1");
+    expect(JSON.parse(mockFetch.mock.calls[0][1].body)).toEqual({
+      gif_media_id: "media_gif_1",
+      background_color: "#00ffaa",
+    });
+  });
+
+  it("waits for GIF conversion success and raises typed terminal failures", async () => {
+    mockFetch
+      .mockResolvedValueOnce(jsonResponse({ data: {
+        id: "mpj_gif_1", kind: "gif_to_mp4", status: "processing",
+        gif_media_id: "media_gif_1", background_color: "#FFFFFF",
+        output_profile: "universal_mp4_v1", output_media_id: null,
+        created_at: "2026-07-17T12:00:00Z", error: null,
+      } }))
+      .mockResolvedValueOnce(jsonResponse({ data: {
+        id: "mpj_gif_1", kind: "gif_to_mp4", status: "succeeded",
+        gif_media_id: "media_gif_1", background_color: "#FFFFFF",
+        output_profile: "universal_mp4_v1", output_media_id: "media_mp4_1",
+        created_at: "2026-07-17T12:00:00Z", error: null,
+      } }));
+    await expect(client.media.waitForGifConversion("mpj_gif_1", { pollIntervalMs: 1, timeoutMs: 100 }))
+      .resolves.toMatchObject({ status: "succeeded", outputMediaId: "media_mp4_1" });
+
+    mockFetch.mockResolvedValueOnce(jsonResponse({ data: {
+      id: "mpj_gif_2", kind: "gif_to_mp4", status: "failed",
+      gif_media_id: "media_gif_2", background_color: "#FFFFFF",
+      output_profile: "universal_mp4_v1", output_media_id: null,
+      created_at: "2026-07-17T12:00:00Z",
+      error: { code: "gif_decode_failed", message: "GIF could not be decoded", retryable: false },
+    } }));
+    await expect(client.media.waitForGifConversion("mpj_gif_2", { pollIntervalMs: 1 }))
+      .rejects.toEqual(expect.objectContaining({
+        name: "GifConversionError", code: "gif_decode_failed", retryable: false,
+      } satisfies Partial<GifConversionError>));
+  });
+
+  it("supports timeout and AbortSignal without cancelling the server job", async () => {
+    const processing = { data: {
+      id: "mpj_gif_1", kind: "gif_to_mp4", status: "processing",
+      gif_media_id: "media_gif_1", background_color: "#FFFFFF",
+      output_profile: "universal_mp4_v1", output_media_id: null,
+      created_at: "2026-07-17T12:00:00Z", error: null,
+    } };
+    mockFetch.mockResolvedValue(jsonResponse(processing));
+    await expect(client.media.waitForGifConversion("mpj_gif_1", { pollIntervalMs: 1, timeoutMs: 2 }))
+      .rejects.toThrow("Timed out waiting for GIF conversion");
+
+    const controller = new AbortController();
+    controller.abort();
+    await expect(client.media.waitForGifConversion("mpj_gif_1", { signal: controller.signal }))
+      .rejects.toMatchObject({ name: "AbortError" });
+    expect(mockFetch.mock.calls.every(([, init]) => init.method === "GET")).toBe(true);
+  });
+
+  it("uploads, converts, and waits without publishing", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "unipost-gif-"));
+    const filePath = join(dir, "animation.gif");
+    writeFileSync(filePath, Buffer.from("GIF89a"));
+    mockFetch
+      .mockResolvedValueOnce(jsonResponse({ data: {
+        id: "media_gif_1", status: "reserved", upload_url: "https://upload.example/gif",
+      } }))
+      .mockResolvedValueOnce(jsonResponse(undefined, 200))
+      .mockResolvedValueOnce(jsonResponse({ data: {
+        id: "mpj_gif_1", kind: "gif_to_mp4", status: "queued",
+        gif_media_id: "media_gif_1", background_color: "#FFFFFF",
+        output_profile: "universal_mp4_v1", output_media_id: null,
+        created_at: "2026-07-17T12:00:00Z", error: null,
+      } }, 202))
+      .mockResolvedValueOnce(jsonResponse({ data: {
+        id: "mpj_gif_1", kind: "gif_to_mp4", status: "succeeded",
+        gif_media_id: "media_gif_1", background_color: "#FFFFFF",
+        output_profile: "universal_mp4_v1", output_media_id: "media_mp4_1",
+        created_at: "2026-07-17T12:00:00Z", error: null,
+      } }));
+    try {
+      const result = await client.media.uploadAndConvertGif(filePath, {
+        idempotencyKey: "upload-gif-1", pollIntervalMs: 1,
+      });
+      expect(result.outputMediaId).toBe("media_mp4_1");
+      expect(mockFetch.mock.calls.some(([url]) => String(url).includes("/v1/posts"))).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

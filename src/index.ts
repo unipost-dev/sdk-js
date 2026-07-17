@@ -10,6 +10,7 @@ export {
   RateLimitError,
   PlatformError,
   QuotaError,
+  GifConversionError,
 } from "./errors.js";
 export type { ErrorContract } from "./errors.js";
 
@@ -88,6 +89,13 @@ export type {
   AudioOverlayRequestOptions,
   AudioOverlayError,
   AudioOverlayJob,
+  GifConversionStatus,
+  GifConversionCreateParams,
+  GifConversionRequestOptions,
+  GifConversionWaitOptions,
+  GifConversionJobError,
+  GifConversionJob,
+  UploadAndConvertGifOptions,
   // Analytics
   Granularity,
   GroupBy,
