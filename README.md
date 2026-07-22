@@ -304,7 +304,13 @@ export async function syncInbox(inbox: ScopedInbox): Promise<void> {
       },
     }
     const confirmed: XInboxBackfillResult = await inbox.sync(confirmedRequest)
-    console.log(confirmed)
+    console.log({
+      status: confirmed.status,
+      accounts_checked: confirmed.accounts_checked,
+      accepted: confirmed.accepted,
+      suppressed: confirmed.suppressed,
+      duplicates: confirmed.duplicates,
+    })
   }
   void ordinary
 }
