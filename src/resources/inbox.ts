@@ -11,25 +11,28 @@ interface InboxListWireResponse {
 }
 
 export class ScopedInbox {
-  constructor(
-    private readonly http: HttpClient,
-    private readonly scope: InboxScope,
-  ) {}
+  readonly #http: HttpClient;
+  readonly #scope: InboxScope;
+
+  constructor(http: HttpClient, scope: InboxScope) {
+    this.#http = http;
+    this.#scope = scope;
+  }
 
   async list(params?: InboxListParams): Promise<InboxListResponse> {
     const query: Record<string, string | number | boolean> = {
-      inbox_scope: this.scope.kind,
+      inbox_scope: this.#scope.kind,
     };
 
-    if (this.scope.kind === "managed_user") {
-      query.external_user_id = this.scope.externalUserId;
+    if (this.#scope.kind === "managed_user") {
+      query.external_user_id = this.#scope.externalUserId;
     }
     if (params?.source !== undefined) query.source = params.source;
     if (params?.isRead !== undefined) query.is_read = params.isRead;
     if (params?.isOwn !== undefined) query.is_own = params.isOwn;
     if (params?.limit !== undefined) query.limit = params.limit;
 
-    const response = await this.http.get<InboxListWireResponse>("/v1/inbox", query);
+    const response = await this.#http.get<InboxListWireResponse>("/v1/inbox", query);
     const result: InboxListResponse = { data: response.data };
     if (response.request_id !== undefined) result.requestId = response.request_id;
     return result;
@@ -37,7 +40,11 @@ export class ScopedInbox {
 }
 
 export class Inbox {
-  constructor(private readonly http: HttpClient) {}
+  readonly #http: HttpClient;
+
+  constructor(http: HttpClient) {
+    this.#http = http;
+  }
 
   managedUser(externalUserId: string): ScopedInbox {
     if (externalUserId.trim().length === 0) {
@@ -45,12 +52,12 @@ export class Inbox {
     }
 
     return new ScopedInbox(
-      this.http,
+      this.#http,
       Object.freeze({ kind: "managed_user", externalUserId }),
     );
   }
 
   workspace(): ScopedInbox {
-    return new ScopedInbox(this.http, Object.freeze({ kind: "workspace" }));
+    return new ScopedInbox(this.#http, Object.freeze({ kind: "workspace" }));
   }
 }

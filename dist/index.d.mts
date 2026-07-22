@@ -932,13 +932,12 @@ type InboxScope = Readonly<{
     kind: "workspace";
 }>;
 declare class ScopedInbox {
-    private readonly http;
-    private readonly scope;
+    #private;
     constructor(http: HttpClient, scope: InboxScope);
     list(params?: InboxListParams): Promise<InboxListResponse>;
 }
 declare class Inbox {
-    private readonly http;
+    #private;
     constructor(http: HttpClient);
     managedUser(externalUserId: string): ScopedInbox;
     workspace(): ScopedInbox;

@@ -178,6 +178,21 @@ describe("Inbox", () => {
     expect(url.searchParams.has("external_user_id")).toBe(false);
   });
 
+  it("keeps the managed-user scope bound after public property shadowing", async () => {
+    mockFetch.mockResolvedValueOnce(jsonResponse({ data: [] }));
+    const scoped = client.inbox.managedUser("bound user");
+
+    expect(Reflect.set(scoped as object, "scope", { kind: "workspace" })).toBe(true);
+    expect(Reflect.get(scoped as object, "scope")).toEqual({ kind: "workspace" });
+
+    await scoped.list();
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    const url = requestedUrl();
+    expect(url.searchParams.getAll("inbox_scope")).toEqual(["managed_user"]);
+    expect(url.searchParams.getAll("external_user_id")).toEqual(["bound user"]);
+  });
+
   it.each(["", " ", "\t", "\n"])(
     "rejects the managed-user id %j synchronously before issuing a request",
     (externalUserId) => {

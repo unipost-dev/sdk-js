@@ -1090,45 +1090,45 @@ var Logs = class {
 
 // src/resources/inbox.ts
 var ScopedInbox = class {
+  #http;
+  #scope;
   constructor(http, scope) {
-    this.http = http;
-    this.scope = scope;
+    this.#http = http;
+    this.#scope = scope;
   }
-  http;
-  scope;
   async list(params) {
     const query = {
-      inbox_scope: this.scope.kind
+      inbox_scope: this.#scope.kind
     };
-    if (this.scope.kind === "managed_user") {
-      query.external_user_id = this.scope.externalUserId;
+    if (this.#scope.kind === "managed_user") {
+      query.external_user_id = this.#scope.externalUserId;
     }
     if (params?.source !== void 0) query.source = params.source;
     if (params?.isRead !== void 0) query.is_read = params.isRead;
     if (params?.isOwn !== void 0) query.is_own = params.isOwn;
     if (params?.limit !== void 0) query.limit = params.limit;
-    const response = await this.http.get("/v1/inbox", query);
+    const response = await this.#http.get("/v1/inbox", query);
     const result = { data: response.data };
     if (response.request_id !== void 0) result.requestId = response.request_id;
     return result;
   }
 };
 var Inbox = class {
+  #http;
   constructor(http) {
-    this.http = http;
+    this.#http = http;
   }
-  http;
   managedUser(externalUserId) {
     if (externalUserId.trim().length === 0) {
       throw new Error("Managed-user Inbox scope requires a non-empty external user ID.");
     }
     return new ScopedInbox(
-      this.http,
+      this.#http,
       Object.freeze({ kind: "managed_user", externalUserId })
     );
   }
   workspace() {
-    return new ScopedInbox(this.http, Object.freeze({ kind: "workspace" }));
+    return new ScopedInbox(this.#http, Object.freeze({ kind: "workspace" }));
   }
 };
 
