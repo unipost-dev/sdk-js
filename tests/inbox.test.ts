@@ -481,7 +481,16 @@ describe("Inbox", () => {
     [422, "PLATFORM_ERROR"],
   ])("preserves non-2xx status %i and server code %s with one request", async (status, code) => {
     mockFetch.mockResolvedValueOnce(
-      jsonResponse({ error: { code, message: `Server rejected reply: ${code}` } }, status),
+      jsonResponse(
+        {
+          error: {
+            code,
+            normalized_code: code.toLowerCase(),
+            message: `Server rejected reply: ${code}`,
+          },
+        },
+        status,
+      ),
     );
 
     let thrown: unknown;
@@ -493,6 +502,32 @@ describe("Inbox", () => {
 
     expect(thrown).toBeInstanceOf(UniPostError);
     expect(thrown).toMatchObject({ status, code });
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps normalized-code precedence for ordinary non-reply requests", async () => {
+    mockFetch.mockResolvedValueOnce(
+      jsonResponse(
+        {
+          error: {
+            code: "RAW_LIST_ERROR",
+            normalized_code: "normalized_list_error",
+            message: "List failed",
+          },
+        },
+        400,
+      ),
+    );
+
+    let thrown: unknown;
+    try {
+      await client.inbox.workspace().list();
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(UniPostError);
+    expect(thrown).toMatchObject({ status: 400, code: "normalized_list_error" });
     expect(mockFetch).toHaveBeenCalledTimes(1);
   });
 

@@ -121,7 +121,9 @@ export function parseApiError(
   options: { preserveCode?: boolean } = {},
 ): UniPostError {
   const msg = body?.error?.message || "Unknown API error";
-  const code = body?.error?.normalized_code || body?.error?.code || "unknown";
+  const code = options.preserveCode
+    ? body?.error?.code || body?.error?.normalized_code || "unknown"
+    : body?.error?.normalized_code || body?.error?.code || "unknown";
   const contract: ErrorContract = {
     error_source: body?.error?.error_source,
     error_temporality: body?.error?.error_temporality,
