@@ -75,8 +75,8 @@ var NotFoundError = class extends UniPostError {
 };
 var ValidationError = class extends UniPostError {
   errors;
-  constructor(message = "Validation failed", errors = {}, contract = {}) {
-    super(message, 422, "validation_error", contract);
+  constructor(message = "Validation failed", errors = {}, contract = {}, code = "validation_error") {
+    super(message, 422, code, contract);
     this.name = "ValidationError";
     this.errors = errors;
   }
@@ -103,7 +103,7 @@ var QuotaError = class extends UniPostError {
     this.name = "QuotaError";
   }
 };
-function parseApiError(status, body) {
+function parseApiError(status, body, options = {}) {
   const msg = body?.error?.message || "Unknown API error";
   const code = body?.error?.normalized_code || body?.error?.code || "unknown";
   const contract = {
@@ -118,7 +118,12 @@ function parseApiError(status, body) {
     case 404:
       return new NotFoundError(msg, contract);
     case 422:
-      return new ValidationError(msg, body?.error?.errors || {}, contract);
+      return new ValidationError(
+        msg,
+        body?.error?.errors || {},
+        contract,
+        options.preserveCode ? code : void 0
+      );
     case 429: {
       const retryAfter = parseInt(String(body?.error?.retry_after ?? "1"), 10);
       return new RateLimitError(retryAfter, msg, contract);
@@ -148,6 +153,10 @@ var HttpClient = class {
     this.timeout = options.timeout;
   }
   async request(method, path, options) {
+    const response = await this.requestWithResponse(method, path, options);
+    return response.body;
+  }
+  async requestWithResponse(method, path, options) {
     const url = new URL(path, this.baseUrl);
     if (options?.query) {
       for (const [key, value] of Object.entries(options.query)) {
@@ -173,15 +182,25 @@ var HttpClient = class {
       init.body = JSON.stringify(options.body);
     }
     let lastError = null;
+    const retryRateLimits = options?.retryRateLimits !== false;
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       try {
         const response = await fetch(url.toString(), init);
         if (response.ok) {
-          if (response.status === 204) return void 0;
-          const text = await response.text();
-          return text ? JSON.parse(text) : void 0;
+          let body2;
+          if (response.status === 204) {
+            body2 = void 0;
+          } else {
+            const text = await response.text();
+            body2 = text ? JSON.parse(text) : void 0;
+          }
+          return {
+            status: response.status,
+            headers: new Headers(response.headers),
+            body: body2
+          };
         }
-        if (response.status === 429) {
+        if (response.status === 429 && retryRateLimits) {
           const retryAfter = parseInt(response.headers.get("Retry-After") || "1", 10);
           if (attempt < MAX_RETRIES) {
             await sleep(retryAfter * 1e3);
@@ -190,9 +209,11 @@ var HttpClient = class {
           throw new RateLimitError(retryAfter);
         }
         const body = await response.json().catch(() => ({}));
-        throw parseApiError(response.status, body);
+        throw parseApiError(response.status, body, {
+          preserveCode: options?.preserveErrorCode
+        });
       } catch (err) {
-        if (err instanceof RateLimitError && attempt < MAX_RETRIES) {
+        if (retryRateLimits && err instanceof RateLimitError && attempt < MAX_RETRIES) {
           await sleep(err.retryAfter * 1e3);
           lastError = err;
           continue;
@@ -1133,13 +1154,15 @@ var ScopedInbox = class {
     this.#http = http;
     this.#scope = scope;
   }
-  async list(params) {
-    const query = {
-      inbox_scope: this.#scope.kind
-    };
+  #scopeQuery() {
+    const query = { inbox_scope: this.#scope.kind };
     if (this.#scope.kind === "managed_user") {
       query.external_user_id = this.#scope.externalUserId;
     }
+    return query;
+  }
+  async list(params) {
+    const query = this.#scopeQuery();
     if (params?.source !== void 0) query.source = params.source;
     if (params?.isRead !== void 0) query.is_read = params.isRead;
     if (params?.isOwn !== void 0) query.is_own = params.isOwn;
@@ -1149,7 +1172,49 @@ var ScopedInbox = class {
     if (response.request_id !== void 0) result.requestId = response.request_id;
     return result;
   }
+  async reply(id, request, options) {
+    const headers = options?.idempotencyKey === void 0 ? void 0 : { "Idempotency-Key": options.idempotencyKey };
+    const response = await this.#http.requestWithResponse(
+      "POST",
+      `/v1/inbox/${encodeURIComponent(id)}/reply`,
+      {
+        body: { text: request.text },
+        query: this.#scopeQuery(),
+        headers,
+        retryRateLimits: false,
+        preserveErrorCode: true
+      }
+    ).catch((error) => {
+      if (error instanceof SyntaxError) {
+        throw new Error("Failed to decode Inbox reply response.");
+      }
+      throw error;
+    });
+    const operationId = response.headers.get("X-UniPost-Operation-Id")?.trim();
+    if (response.status === 200 && isRecord(response.body?.data)) {
+      const result = {
+        state: "completed",
+        item: response.body.data
+      };
+      if (operationId) result.operationId = operationId;
+      return result;
+    }
+    if (response.status === 202 && operationId && response.body?.error?.code === "X_REMOTE_ACCEPTED_RECONCILING" && typeof response.body.error.message === "string" && (response.body.request_id === void 0 || typeof response.body.request_id === "string")) {
+      const result = {
+        state: "reconciling",
+        operationId,
+        code: "X_REMOTE_ACCEPTED_RECONCILING",
+        message: response.body.error.message
+      };
+      if (response.body.request_id !== void 0) result.requestId = response.body.request_id;
+      return result;
+    }
+    throw new Error(`Failed to decode Inbox reply response with status ${response.status}.`);
+  }
 };
+function isRecord(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
 var Inbox = class {
   #http;
   constructor(http) {

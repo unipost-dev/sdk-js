@@ -8,16 +8,25 @@ interface SSEEvent<T> {
     id?: string;
     data: T;
 }
+interface HttpRequestOptions {
+    body?: unknown;
+    query?: Record<string, string | number | boolean | undefined | null>;
+    headers?: Record<string, string>;
+    retryRateLimits?: boolean;
+    preserveErrorCode?: boolean;
+}
+interface HttpResponse<T> {
+    status: number;
+    headers: Headers;
+    body: T;
+}
 declare class HttpClient {
     private readonly apiKey;
     private readonly baseUrl;
     private readonly timeout;
     constructor(options: HttpClientOptions);
-    request<T>(method: string, path: string, options?: {
-        body?: unknown;
-        query?: Record<string, string | number | boolean | undefined | null>;
-        headers?: Record<string, string>;
-    }): Promise<T>;
+    request<T>(method: string, path: string, options?: HttpRequestOptions): Promise<T>;
+    requestWithResponse<T>(method: string, path: string, options?: HttpRequestOptions): Promise<HttpResponse<T>>;
     requestText(method: string, path: string, options?: {
         query?: Record<string, string | number | boolean | undefined | null>;
         headers?: Record<string, string>;
@@ -310,6 +319,23 @@ interface InboxListResponse {
     data: InboxItem[];
     requestId?: string;
 }
+interface InboxReplyRequest {
+    text: string;
+}
+interface InboxReplyOptions {
+    idempotencyKey?: string;
+}
+type InboxReplyResult = {
+    state: "completed";
+    item: InboxItem;
+    operationId?: string;
+} | {
+    state: "reconciling";
+    operationId: string;
+    code: "X_REMOTE_ACCEPTED_RECONCILING";
+    message: string;
+    requestId?: string;
+};
 
 interface Workspace {
     id: string;
@@ -935,6 +961,7 @@ declare class ScopedInbox {
     #private;
     constructor(http: HttpClient, scope: InboxScope);
     list(params?: InboxListParams): Promise<InboxListResponse>;
+    reply(id: string, request: InboxReplyRequest, options?: InboxReplyOptions): Promise<InboxReplyResult>;
 }
 declare class Inbox {
     #private;
@@ -1010,7 +1037,7 @@ declare class NotFoundError extends UniPostError {
 /** 422 - Validation error. */
 declare class ValidationError extends UniPostError {
     readonly errors: Record<string, string[]>;
-    constructor(message?: string, errors?: Record<string, string[]>, contract?: ErrorContract);
+    constructor(message?: string, errors?: Record<string, string[]>, contract?: ErrorContract, code?: string);
 }
 /** 429 - Rate limit exceeded. */
 declare class RateLimitError extends UniPostError {
@@ -1035,4 +1062,4 @@ declare class QuotaError extends UniPostError {
  */
 declare function verifyWebhookSignature(options: VerifyWebhookOptions): Promise<boolean>;
 
-export { type AccountHealth, type AccountStatus, type AnalyticsQueryParams, type AnalyticsRollup, type AnalyticsRollupParams, type ApiKey, type ApiKeyEnvironment, type AudioOverlayCreateParams, type AudioOverlayError, type AudioOverlayFit, type AudioOverlayJob, type AudioOverlayMode, type AudioOverlayRequestOptions, type AudioOverlayStatus, AuthError, type BulkPostError, type BulkPostResult, type ConnectAccountParams, type ConnectSession, type ConnectionType, type CreateApiKeyParams, type CreateConnectSessionParams, type CreatePlatformCredentialParams, type CreatePostParams, type CreatePostPlatformPost, type CreateProfileParams, type CreateWebhookParams, type CreatedApiKey, type DeliveryJob, type ErrorContract, type ErrorSource, type ErrorTemporality, type GetConnectUrlParams, type Granularity, type GroupBy, type InboxItem, type InboxListParams, type InboxListResponse, type InboxSource, type InboxThreadStatus, type ListAccountsParams, type ListDeliveryJobsParams, type ListLogsParams, type ListPostsParams, type LogCategory, type LogEntry, type LogLevel, type LogSource, type LogStatus, type LogStreamOptions, type LogStreamParams, type ManagedUser, type MediaUploadRequest, type MediaUploadResponse, NotFoundError, type OAuthConnectResponse, type PaginatedResponse, type Plan, type Platform, type PlatformCredential, PlatformError, type PlatformResult, type Post, type PostAnalyticsItem, type PostPreviewLink, type PostQueueSnapshot, type PostStatus, type Profile, type ProviderError, QuotaError, RateLimitError, type RetryPolicy, type RetryState, type SocialAccount, UniPost, type UniPostClientOptions, UniPostError, type UpdatePostParams, type UpdateProfileParams, type UpdateWebhookParams, type UpdateWorkspaceParams, type Usage, ValidationError, type ValidationIssue, type ValidationResult, type VerifyWebhookOptions, type WebhookEvent, type WebhookEventType, type WebhookSubscription, type WebhookSubscriptionSecret, type Workspace, verifyWebhookSignature };
+export { type AccountHealth, type AccountStatus, type AnalyticsQueryParams, type AnalyticsRollup, type AnalyticsRollupParams, type ApiKey, type ApiKeyEnvironment, type AudioOverlayCreateParams, type AudioOverlayError, type AudioOverlayFit, type AudioOverlayJob, type AudioOverlayMode, type AudioOverlayRequestOptions, type AudioOverlayStatus, AuthError, type BulkPostError, type BulkPostResult, type ConnectAccountParams, type ConnectSession, type ConnectionType, type CreateApiKeyParams, type CreateConnectSessionParams, type CreatePlatformCredentialParams, type CreatePostParams, type CreatePostPlatformPost, type CreateProfileParams, type CreateWebhookParams, type CreatedApiKey, type DeliveryJob, type ErrorContract, type ErrorSource, type ErrorTemporality, type GetConnectUrlParams, type Granularity, type GroupBy, type InboxItem, type InboxListParams, type InboxListResponse, type InboxReplyOptions, type InboxReplyRequest, type InboxReplyResult, type InboxSource, type InboxThreadStatus, type ListAccountsParams, type ListDeliveryJobsParams, type ListLogsParams, type ListPostsParams, type LogCategory, type LogEntry, type LogLevel, type LogSource, type LogStatus, type LogStreamOptions, type LogStreamParams, type ManagedUser, type MediaUploadRequest, type MediaUploadResponse, NotFoundError, type OAuthConnectResponse, type PaginatedResponse, type Plan, type Platform, type PlatformCredential, PlatformError, type PlatformResult, type Post, type PostAnalyticsItem, type PostPreviewLink, type PostQueueSnapshot, type PostStatus, type Profile, type ProviderError, QuotaError, RateLimitError, type RetryPolicy, type RetryState, type SocialAccount, UniPost, type UniPostClientOptions, UniPostError, type UpdatePostParams, type UpdateProfileParams, type UpdateWebhookParams, type UpdateWorkspaceParams, type Usage, ValidationError, type ValidationIssue, type ValidationResult, type VerifyWebhookOptions, type WebhookEvent, type WebhookEventType, type WebhookSubscription, type WebhookSubscriptionSecret, type Workspace, verifyWebhookSignature };

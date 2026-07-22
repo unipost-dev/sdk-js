@@ -49,3 +49,21 @@ export interface InboxListResponse {
   data: InboxItem[];
   requestId?: string;
 }
+
+export interface InboxReplyRequest {
+  text: string;
+}
+
+export interface InboxReplyOptions {
+  idempotencyKey?: string;
+}
+
+export type InboxReplyResult =
+  | { state: "completed"; item: InboxItem; operationId?: string }
+  | {
+      state: "reconciling";
+      operationId: string;
+      code: "X_REMOTE_ACCEPTED_RECONCILING";
+      message: string;
+      requestId?: string;
+    };

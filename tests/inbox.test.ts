@@ -1,6 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { UniPost } from "../src/index.js";
-import type { InboxItem, InboxListParams, InboxListResponse } from "../src/index.js";
+import { UniPost, UniPostError } from "../src/index.js";
+import type {
+  InboxItem,
+  InboxListParams,
+  InboxListResponse,
+  InboxReplyOptions,
+  InboxReplyRequest,
+  InboxReplyResult,
+} from "../src/index.js";
 
 const mockFetch = vi.fn();
 vi.stubGlobal("fetch", mockFetch);
@@ -23,6 +30,21 @@ type ExpectedInboxListResponse = {
   data: InboxItem[];
   requestId?: string;
 };
+type ExpectedInboxReplyRequest = {
+  text: string;
+};
+type ExpectedInboxReplyOptions = {
+  idempotencyKey?: string;
+};
+type ExpectedInboxReplyResult =
+  | { state: "completed"; item: InboxItem; operationId?: string }
+  | {
+      state: "reconciling";
+      operationId: string;
+      code: "X_REMOTE_ACCEPTED_RECONCILING";
+      message: string;
+      requestId?: string;
+    };
 type IsAny<Value> = 0 extends (1 & Value) ? true : false;
 type Equal<Left, Right> =
   IsAny<Left> extends true
@@ -40,6 +62,9 @@ type Assert<Condition extends true> = Condition;
 type InboxItemIsNotAny = Assert<Equal<IsAny<InboxItem>, false>>;
 type InboxListParamsIsExact = Assert<Equal<InboxListParams, ExpectedInboxListParams>>;
 type InboxListResponseIsExact = Assert<Equal<InboxListResponse, ExpectedInboxListResponse>>;
+type InboxReplyRequestIsExact = Assert<Equal<InboxReplyRequest, ExpectedInboxReplyRequest>>;
+type InboxReplyOptionsIsExact = Assert<Equal<InboxReplyOptions, ExpectedInboxReplyOptions>>;
+type InboxReplyResultIsExact = Assert<Equal<InboxReplyResult, ExpectedInboxReplyResult>>;
 type ScopedInboxListResult = Awaited<
   ReturnType<ReturnType<UniPost["inbox"]["workspace"]>["list"]>
 >;
@@ -77,6 +102,43 @@ type WorkspaceScopedInboxListResultIsExact = Assert<
 type WorkspaceScopedInboxListResultIsNotAny = Assert<
   Equal<IsAny<WorkspaceScopedInboxListResult>, false>
 >;
+type ExpectedScopedInboxReplyParameters = [
+  id: string,
+  request: InboxReplyRequest,
+  options?: InboxReplyOptions,
+];
+type ManagedUserScopedInboxReply = ReturnType<UniPost["inbox"]["managedUser"]>["reply"];
+type ManagedUserScopedInboxReplyParameters = Parameters<ManagedUserScopedInboxReply>;
+type ManagedUserScopedInboxReplyRequest = ManagedUserScopedInboxReplyParameters[1];
+type ManagedUserScopedInboxReplyOptions = ManagedUserScopedInboxReplyParameters[2];
+type ManagedUserScopedInboxReplyResult = Awaited<ReturnType<ManagedUserScopedInboxReply>>;
+type ManagedUserScopedInboxReplyParametersAreExact = Assert<
+  Equal<ManagedUserScopedInboxReplyParameters, ExpectedScopedInboxReplyParameters>
+>;
+type ManagedUserScopedInboxReplyRequestIsNotAny = Assert<
+  Equal<IsAny<ManagedUserScopedInboxReplyRequest>, false>
+>;
+type ManagedUserScopedInboxReplyOptionsIsNotAny = Assert<
+  Equal<IsAny<ManagedUserScopedInboxReplyOptions>, false>
+>;
+type ManagedUserScopedInboxReplyResultIsExact = Assert<
+  Equal<ManagedUserScopedInboxReplyResult, InboxReplyResult>
+>;
+type ManagedUserScopedInboxReplyResultIsNotAny = Assert<
+  Equal<IsAny<ManagedUserScopedInboxReplyResult>, false>
+>;
+type WorkspaceScopedInboxReply = ReturnType<UniPost["inbox"]["workspace"]>["reply"];
+type WorkspaceScopedInboxReplyParameters = Parameters<WorkspaceScopedInboxReply>;
+type WorkspaceScopedInboxReplyResult = Awaited<ReturnType<WorkspaceScopedInboxReply>>;
+type WorkspaceScopedInboxReplyParametersAreExact = Assert<
+  Equal<WorkspaceScopedInboxReplyParameters, ExpectedScopedInboxReplyParameters>
+>;
+type WorkspaceScopedInboxReplyResultIsExact = Assert<
+  Equal<WorkspaceScopedInboxReplyResult, InboxReplyResult>
+>;
+type WorkspaceScopedInboxReplyResultIsNotAny = Assert<
+  Equal<IsAny<WorkspaceScopedInboxReplyResult>, false>
+>;
 type InboxListParamsContract = Pick<InboxListParams, keyof ExpectedInboxListParams>;
 
 const item = {
@@ -93,11 +155,15 @@ const item = {
   created_at: "2026-07-22T00:00:00Z",
 };
 
-function jsonResponse(body: unknown, status = 200) {
+function jsonResponse(
+  body: unknown,
+  status = 200,
+  headers?: ConstructorParameters<typeof Headers>[0],
+) {
   return {
     ok: status >= 200 && status < 300,
     status,
-    headers: new Headers(),
+    headers: new Headers(headers),
     text: async () => (body === undefined ? "" : JSON.stringify(body)),
     json: async () => body,
   };
@@ -252,5 +318,196 @@ describe("Inbox", () => {
     expect(result).not.toHaveProperty("offset");
     expect(result).not.toHaveProperty("total");
     expect(result).not.toHaveProperty("next_token");
+  });
+
+  it("replies in managed-user scope with an encoded id, JSON body, exact idempotency header, and trimmed operation id", async () => {
+    mockFetch.mockResolvedValueOnce(
+      jsonResponse(
+        { data: item },
+        200,
+        { "X-UniPost-Operation-Id": "  op_completed  " },
+      ),
+    );
+
+    const result = await client.inbox.managedUser("user A").reply(
+      "item /?#",
+      { text: "Thanks for reaching out!" },
+      { idempotencyKey: "idem-exact-value" },
+    );
+
+    expect(result).toEqual({ state: "completed", item, operationId: "op_completed" });
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({ text: "Thanks for reaching out!" });
+    const headers = new Headers(init.headers);
+    expect(headers.get("Idempotency-Key")).toBe("idem-exact-value");
+
+    const url = requestedUrl();
+    expect(url.pathname).toBe("/v1/inbox/item%20%2F%3F%23/reply");
+    expect(sortedQueryEntries(url)).toEqual([
+      ["external_user_id", "user A"],
+      ["inbox_scope", "managed_user"],
+    ]);
+  });
+
+  it("returns a completed reply without adding absent operation or idempotency headers", async () => {
+    mockFetch.mockResolvedValueOnce(jsonResponse({ data: item }));
+
+    const result = await client.inbox.workspace().reply("inbox_1", { text: "Acknowledged" });
+
+    expect(result).toEqual({ state: "completed", item });
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+    expect(new Headers(init.headers).has("Idempotency-Key")).toBe(false);
+    expect(sortedQueryEntries(requestedUrl())).toEqual([["inbox_scope", "workspace"]]);
+  });
+
+  it("returns the response-aware reconciliation state for a valid accepted reply", async () => {
+    mockFetch.mockResolvedValueOnce(
+      jsonResponse(
+        {
+          error: {
+            code: "X_REMOTE_ACCEPTED_RECONCILING",
+            message: "Remote accepted the reply; reconciliation is pending.",
+          },
+          request_id: "req_reconcile_1",
+        },
+        202,
+        { "X-UniPost-Operation-Id": "  op_reconcile_1  " },
+      ),
+    );
+
+    const result = await client.inbox.workspace().reply("inbox_1", { text: "Reply" });
+
+    expect(result).toEqual({
+      state: "reconciling",
+      operationId: "op_reconcile_1",
+      code: "X_REMOTE_ACCEPTED_RECONCILING",
+      message: "Remote accepted the reply; reconciliation is pending.",
+      requestId: "req_reconcile_1",
+    });
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    {
+      name: "missing operation header",
+      status: 202,
+      body: {
+        error: {
+          code: "X_REMOTE_ACCEPTED_RECONCILING",
+          message: "Pending",
+        },
+      },
+    },
+    {
+      name: "blank operation header",
+      status: 202,
+      headers: { "X-UniPost-Operation-Id": " \t " },
+      body: {
+        error: {
+          code: "X_REMOTE_ACCEPTED_RECONCILING",
+          message: "Pending",
+        },
+      },
+    },
+    {
+      name: "wrong reconciliation code",
+      status: 202,
+      headers: { "X-UniPost-Operation-Id": "op_1" },
+      body: { error: { code: "UNEXPECTED_CODE", message: "Pending" } },
+    },
+    {
+      name: "missing reconciliation code",
+      status: 202,
+      headers: { "X-UniPost-Operation-Id": "op_1" },
+      body: { error: { message: "Pending" } },
+    },
+    {
+      name: "missing error",
+      status: 202,
+      headers: { "X-UniPost-Operation-Id": "op_1" },
+      body: { request_id: "req_1" },
+    },
+    {
+      name: "missing reconciliation message",
+      status: 202,
+      headers: { "X-UniPost-Operation-Id": "op_1" },
+      body: { error: { code: "X_REMOTE_ACCEPTED_RECONCILING" } },
+    },
+    {
+      name: "unexpected accepted envelope",
+      status: 202,
+      headers: { "X-UniPost-Operation-Id": "op_1" },
+      body: { data: item },
+    },
+    { name: "200 without data", status: 200, body: { request_id: "req_1" } },
+    { name: "unexpected successful status", status: 201, body: { data: item } },
+    { name: "empty no-content status", status: 204, body: undefined },
+  ])("fails closed for $name without replaying the reply", async ({ status, body, headers }) => {
+    mockFetch.mockResolvedValueOnce(jsonResponse(body, status, headers));
+
+    await expect(
+      client.inbox.workspace().reply("inbox_1", { text: "Reply" }),
+    ).rejects.toThrow(/decode Inbox reply response/i);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("fails closed with a decoding error for malformed successful JSON without replay", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 202,
+      headers: new Headers({ "X-UniPost-Operation-Id": "op_1" }),
+      text: async () => "{",
+    });
+
+    await expect(
+      client.inbox.workspace().reply("inbox_1", { text: "Reply" }),
+    ).rejects.toThrow(/decode Inbox reply response/i);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    [400, "VALIDATION_ERROR"],
+    [402, "X_MONTHLY_USAGE_LIMIT_EXCEEDED"],
+    [409, "X_RECONNECT_REQUIRED"],
+    [409, "NEEDS_RECONNECT"],
+    [409, "IDEMPOTENCY_KEY_CONFLICT"],
+    [409, "X_WRITE_OUTCOME_PENDING"],
+    [409, "X_WRITE_NEEDS_RECONCILIATION"],
+    [409, "X_USAGE_REVERSAL_PENDING"],
+    [422, "VALIDATION_ERROR"],
+    [422, "PLATFORM_ERROR"],
+  ])("preserves non-2xx status %i and server code %s with one request", async (status, code) => {
+    mockFetch.mockResolvedValueOnce(
+      jsonResponse({ error: { code, message: `Server rejected reply: ${code}` } }, status),
+    );
+
+    let thrown: unknown;
+    try {
+      await client.inbox.workspace().reply("inbox_1", { text: "Reply" });
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(UniPostError);
+    expect(thrown).toMatchObject({ status, code });
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not automatically replay a rate-limited reply", async () => {
+    mockFetch.mockResolvedValueOnce(
+      jsonResponse(
+        { error: { code: "RATE_LIMITED", message: "Try later", retry_after: 0 } },
+        429,
+        { "Retry-After": "0" },
+      ),
+    );
+
+    await expect(
+      client.inbox.workspace().reply("inbox_1", { text: "Reply" }),
+    ).rejects.toBeInstanceOf(UniPostError);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
   });
 });

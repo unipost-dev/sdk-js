@@ -112,6 +112,9 @@ export type {
   InboxItem,
   InboxListParams,
   InboxListResponse,
+  InboxReplyRequest,
+  InboxReplyOptions,
+  InboxReplyResult,
   // Pagination
   PaginatedResponse,
   // Client options

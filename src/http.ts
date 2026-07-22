@@ -16,6 +16,20 @@ export interface SSEEvent<T> {
   data: T;
 }
 
+interface HttpRequestOptions {
+  body?: unknown;
+  query?: Record<string, string | number | boolean | undefined | null>;
+  headers?: Record<string, string>;
+  retryRateLimits?: boolean;
+  preserveErrorCode?: boolean;
+}
+
+interface HttpResponse<T> {
+  status: number;
+  headers: Headers;
+  body: T;
+}
+
 export class HttpClient {
   private readonly apiKey: string;
   private readonly baseUrl: string;
@@ -30,12 +44,17 @@ export class HttpClient {
   async request<T>(
     method: string,
     path: string,
-    options?: {
-      body?: unknown;
-      query?: Record<string, string | number | boolean | undefined | null>;
-      headers?: Record<string, string>;
-    },
+    options?: HttpRequestOptions,
   ): Promise<T> {
+    const response = await this.requestWithResponse<T>(method, path, options);
+    return response.body;
+  }
+
+  async requestWithResponse<T>(
+    method: string,
+    path: string,
+    options?: HttpRequestOptions,
+  ): Promise<HttpResponse<T>> {
     const url = new URL(path, this.baseUrl);
 
     if (options?.query) {
@@ -67,18 +86,28 @@ export class HttpClient {
     }
 
     let lastError: Error | null = null;
+    const retryRateLimits = options?.retryRateLimits !== false;
 
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       try {
         const response = await fetch(url.toString(), init);
 
         if (response.ok) {
-          if (response.status === 204) return undefined as T;
-          const text = await response.text();
-          return (text ? JSON.parse(text) : undefined) as T;
+          let body: T;
+          if (response.status === 204) {
+            body = undefined as T;
+          } else {
+            const text = await response.text();
+            body = (text ? JSON.parse(text) : undefined) as T;
+          }
+          return {
+            status: response.status,
+            headers: new Headers(response.headers),
+            body,
+          };
         }
 
-        if (response.status === 429) {
+        if (response.status === 429 && retryRateLimits) {
           const retryAfter = parseInt(response.headers.get("Retry-After") || "1", 10);
           if (attempt < MAX_RETRIES) {
             await sleep(retryAfter * 1000);
@@ -88,9 +117,11 @@ export class HttpClient {
         }
 
         const body = (await response.json().catch(() => ({}))) as Parameters<typeof parseApiError>[1];
-        throw parseApiError(response.status, body);
+        throw parseApiError(response.status, body, {
+          preserveCode: options?.preserveErrorCode,
+        });
       } catch (err) {
-        if (err instanceof RateLimitError && attempt < MAX_RETRIES) {
+        if (retryRateLimits && err instanceof RateLimitError && attempt < MAX_RETRIES) {
           await sleep(err.retryAfter * 1000);
           lastError = err;
           continue;

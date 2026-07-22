@@ -48,6 +48,9 @@ export type {
   InboxItem,
   InboxListParams,
   InboxListResponse,
+  InboxReplyRequest,
+  InboxReplyOptions,
+  InboxReplyResult,
 } from "./inbox.js";
 
 // --- Workspace ---
