@@ -42,6 +42,14 @@ export type {
   UpdateWebhookParams,
 } from "./webhooks.js";
 
+export type {
+  InboxSource,
+  InboxThreadStatus,
+  InboxItem,
+  InboxListParams,
+  InboxListResponse,
+} from "./inbox.js";
+
 // --- Workspace ---
 
 export interface Workspace {

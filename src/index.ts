@@ -106,6 +106,12 @@ export type {
   ListLogsParams,
   LogStreamParams,
   LogStreamOptions,
+  // Inbox
+  InboxSource,
+  InboxThreadStatus,
+  InboxItem,
+  InboxListParams,
+  InboxListResponse,
   // Pagination
   PaginatedResponse,
   // Client options

@@ -270,6 +270,47 @@ interface UpdateWebhookParams {
     active?: boolean;
 }
 
+type InboxSource = "ig_comment" | "ig_dm" | "threads_reply" | "fb_comment" | "fb_dm" | "x_reply" | "x_dm";
+type InboxThreadStatus = "open" | "assigned" | "resolved";
+interface InboxItem {
+    id: string;
+    social_account_id: string;
+    workspace_id: string;
+    source: InboxSource;
+    external_id: string;
+    thread_key: string;
+    thread_status: InboxThreadStatus;
+    is_read: boolean;
+    is_own: boolean;
+    received_at: string;
+    created_at: string;
+    parent_external_id?: string;
+    assigned_to?: string;
+    linked_post_id?: string;
+    author_name?: string;
+    author_id?: string;
+    author_avatar_url?: string;
+    body?: string;
+    account_name?: string;
+    account_platform?: string;
+    account_avatar_url?: string;
+    x_credits_counted?: number;
+    x_credit_operation?: string;
+    x_credit_catalog_version?: string;
+    x_credit_billing_mode?: string;
+    url?: string;
+}
+interface InboxListParams {
+    source?: InboxSource;
+    isRead?: boolean;
+    isOwn?: boolean;
+    limit?: number;
+}
+interface InboxListResponse {
+    data: InboxItem[];
+    requestId?: string;
+}
+
 interface Workspace {
     id: string;
     name: string;
@@ -884,6 +925,25 @@ declare class Logs {
     stream(params?: LogStreamParams, options?: LogStreamOptions): AsyncGenerator<LogEntry>;
 }
 
+type InboxScope = Readonly<{
+    kind: "managed_user";
+    externalUserId: string;
+}> | Readonly<{
+    kind: "workspace";
+}>;
+declare class ScopedInbox {
+    private readonly http;
+    private readonly scope;
+    constructor(http: HttpClient, scope: InboxScope);
+    list(params?: InboxListParams): Promise<InboxListResponse>;
+}
+declare class Inbox {
+    private readonly http;
+    constructor(http: HttpClient);
+    managedUser(externalUserId: string): ScopedInbox;
+    workspace(): ScopedInbox;
+}
+
 /**
  * Official UniPost API client.
  *
@@ -918,6 +978,7 @@ declare class UniPost {
     readonly oauth: OAuth;
     readonly usage: UsageApi;
     readonly logs: Logs;
+    readonly inbox: Inbox;
     constructor(options?: UniPostClientOptions);
 }
 
@@ -975,4 +1036,4 @@ declare class QuotaError extends UniPostError {
  */
 declare function verifyWebhookSignature(options: VerifyWebhookOptions): Promise<boolean>;
 
-export { type AccountHealth, type AccountStatus, type AnalyticsQueryParams, type AnalyticsRollup, type AnalyticsRollupParams, type ApiKey, type ApiKeyEnvironment, type AudioOverlayCreateParams, type AudioOverlayError, type AudioOverlayFit, type AudioOverlayJob, type AudioOverlayMode, type AudioOverlayRequestOptions, type AudioOverlayStatus, AuthError, type BulkPostError, type BulkPostResult, type ConnectAccountParams, type ConnectSession, type ConnectionType, type CreateApiKeyParams, type CreateConnectSessionParams, type CreatePlatformCredentialParams, type CreatePostParams, type CreatePostPlatformPost, type CreateProfileParams, type CreateWebhookParams, type CreatedApiKey, type DeliveryJob, type ErrorContract, type ErrorSource, type ErrorTemporality, type GetConnectUrlParams, type Granularity, type GroupBy, type ListAccountsParams, type ListDeliveryJobsParams, type ListLogsParams, type ListPostsParams, type LogCategory, type LogEntry, type LogLevel, type LogSource, type LogStatus, type LogStreamOptions, type LogStreamParams, type ManagedUser, type MediaUploadRequest, type MediaUploadResponse, NotFoundError, type OAuthConnectResponse, type PaginatedResponse, type Plan, type Platform, type PlatformCredential, PlatformError, type PlatformResult, type Post, type PostAnalyticsItem, type PostPreviewLink, type PostQueueSnapshot, type PostStatus, type Profile, type ProviderError, QuotaError, RateLimitError, type RetryPolicy, type RetryState, type SocialAccount, UniPost, type UniPostClientOptions, UniPostError, type UpdatePostParams, type UpdateProfileParams, type UpdateWebhookParams, type UpdateWorkspaceParams, type Usage, ValidationError, type ValidationIssue, type ValidationResult, type VerifyWebhookOptions, type WebhookEvent, type WebhookEventType, type WebhookSubscription, type WebhookSubscriptionSecret, type Workspace, verifyWebhookSignature };
+export { type AccountHealth, type AccountStatus, type AnalyticsQueryParams, type AnalyticsRollup, type AnalyticsRollupParams, type ApiKey, type ApiKeyEnvironment, type AudioOverlayCreateParams, type AudioOverlayError, type AudioOverlayFit, type AudioOverlayJob, type AudioOverlayMode, type AudioOverlayRequestOptions, type AudioOverlayStatus, AuthError, type BulkPostError, type BulkPostResult, type ConnectAccountParams, type ConnectSession, type ConnectionType, type CreateApiKeyParams, type CreateConnectSessionParams, type CreatePlatformCredentialParams, type CreatePostParams, type CreatePostPlatformPost, type CreateProfileParams, type CreateWebhookParams, type CreatedApiKey, type DeliveryJob, type ErrorContract, type ErrorSource, type ErrorTemporality, type GetConnectUrlParams, type Granularity, type GroupBy, type InboxItem, type InboxListParams, type InboxListResponse, type InboxSource, type InboxThreadStatus, type ListAccountsParams, type ListDeliveryJobsParams, type ListLogsParams, type ListPostsParams, type LogCategory, type LogEntry, type LogLevel, type LogSource, type LogStatus, type LogStreamOptions, type LogStreamParams, type ManagedUser, type MediaUploadRequest, type MediaUploadResponse, NotFoundError, type OAuthConnectResponse, type PaginatedResponse, type Plan, type Platform, type PlatformCredential, PlatformError, type PlatformResult, type Post, type PostAnalyticsItem, type PostPreviewLink, type PostQueueSnapshot, type PostStatus, type Profile, type ProviderError, QuotaError, RateLimitError, type RetryPolicy, type RetryState, type SocialAccount, UniPost, type UniPostClientOptions, UniPostError, type UpdatePostParams, type UpdateProfileParams, type UpdateWebhookParams, type UpdateWorkspaceParams, type Usage, ValidationError, type ValidationIssue, type ValidationResult, type VerifyWebhookOptions, type WebhookEvent, type WebhookEventType, type WebhookSubscription, type WebhookSubscriptionSecret, type Workspace, verifyWebhookSignature };
