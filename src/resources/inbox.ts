@@ -138,7 +138,11 @@ export class ScopedInbox {
   }
 
   sync(): Promise<InboxSyncResult>;
+  sync(request: undefined): Promise<InboxSyncResult>;
   sync(request: InboxSyncRequest): Promise<XInboxBackfillResult>;
+  sync(
+    request: InboxSyncRequest | undefined,
+  ): Promise<InboxSyncResult | XInboxBackfillResult>;
   async sync(request?: InboxSyncRequest): Promise<InboxSyncResult | XInboxBackfillResult> {
     if (request === undefined) {
       const response = await this.#post<InboxDataWireResponse<InboxSyncResult>>(

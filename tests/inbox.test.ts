@@ -114,7 +114,7 @@ type ExpectedXInboxBackfillResult =
       confirmation_operation_id: string;
       execution_lease_expires_at: string;
       estimated_x_credits?: number;
-      confirmation_required?: boolean;
+      confirmation_required?: false;
       confirmation_token?: string;
       confirmation_expires_at?: string;
       accounts_checked?: number;
@@ -360,7 +360,11 @@ type ScopedInboxMediaContextResultIsNotAny = Assert<
 type ScopedInboxSyncOverloadsAreExact = Assert<
   ScopedInbox["sync"] extends {
     (): Promise<InboxSyncResult>;
+    (request: undefined): Promise<InboxSyncResult>;
     (request: InboxSyncRequest): Promise<XInboxBackfillResult>;
+    (
+      request: InboxSyncRequest | undefined,
+    ): Promise<InboxSyncResult | XInboxBackfillResult>;
   }
     ? true
     : false
@@ -1063,11 +1067,8 @@ describe("Inbox", () => {
   it("treats explicit undefined sync as an ordinary sync without a body", async () => {
     mockFetch.mockResolvedValueOnce(jsonResponse({ data: syncResult }));
     const scoped = client.inbox.workspace();
-    const syncFromJavaScript = scoped.sync.bind(scoped) as unknown as (
-      request: undefined,
-    ) => Promise<InboxSyncResult>;
 
-    const result = await syncFromJavaScript(undefined);
+    const result = await scoped.sync(undefined);
 
     expect(result).toEqual(syncResult);
     expect(mockFetch).toHaveBeenCalledTimes(1);
@@ -1085,20 +1086,39 @@ describe("Inbox", () => {
   });
 
   it("correlates ordinary and X backfill sync overloads at typecheck time", () => {
-    const checkSyncOverloads = (scoped: ScopedInbox) => {
+    const checkSyncOverloads = (
+      scoped: ScopedInbox,
+      maybeRequest: InboxSyncRequest | undefined,
+    ) => {
       const ordinary = scoped.sync();
+      const explicitUndefined = scoped.sync(undefined);
       const backfill = scoped.sync({
         xBackfill: {
           includeReplies: true,
           includeDms: false,
         },
       });
+      const maybeBackfill = scoped.sync(maybeRequest);
       type OrdinaryResult = Awaited<typeof ordinary>;
+      type ExplicitUndefinedResult = Awaited<typeof explicitUndefined>;
       type BackfillResult = Awaited<typeof backfill>;
+      type MaybeBackfillResult = Awaited<typeof maybeBackfill>;
       type OrdinaryResultIsExact = Assert<Equal<OrdinaryResult, InboxSyncResult>>;
       type OrdinaryResultIsNotAny = Assert<Equal<IsAny<OrdinaryResult>, false>>;
+      type ExplicitUndefinedResultIsExact = Assert<
+        Equal<ExplicitUndefinedResult, InboxSyncResult>
+      >;
+      type ExplicitUndefinedResultIsNotAny = Assert<
+        Equal<IsAny<ExplicitUndefinedResult>, false>
+      >;
       type BackfillResultIsExact = Assert<Equal<BackfillResult, XInboxBackfillResult>>;
       type BackfillResultIsNotAny = Assert<Equal<IsAny<BackfillResult>, false>>;
+      type MaybeBackfillResultIsExact = Assert<
+        Equal<MaybeBackfillResult, InboxSyncResult | XInboxBackfillResult>
+      >;
+      type MaybeBackfillResultIsNotAny = Assert<
+        Equal<IsAny<MaybeBackfillResult>, false>
+      >;
 
       // @ts-expect-error a supplied sync request must contain xBackfill.
       scoped.sync({});
@@ -1124,17 +1144,27 @@ describe("Inbox", () => {
       read: 11,
       details: [],
     };
+    const checkInvalidInProgress = () => {
+      // @ts-expect-error in-progress execution cannot also require confirmation.
+      const invalidInProgress: XInboxBackfillResult = {
+        status: "in_progress",
+        confirmation_operation_id: "confirm_operation_invalid",
+        execution_lease_expires_at: "2026-07-22T02:00:00Z",
+        confirmation_required: true,
+      };
+      return invalidInProgress;
+    };
     const checkNarrowing = (result: XInboxBackfillResult) => {
-      if (result.status === "in_progress") {
-        const operationId: string = result.confirmation_operation_id;
-        const leaseExpiresAt: string = result.execution_lease_expires_at;
-        return [operationId, leaseExpiresAt];
-      }
       if (result.confirmation_required) {
         const token: string = result.confirmation_token;
         const expiresAt: string = result.confirmation_expires_at;
         const accountsChecked: number = result.accounts_checked;
         return [token, expiresAt, accountsChecked];
+      }
+      if (result.status === "in_progress") {
+        const operationId: string = result.confirmation_operation_id;
+        const leaseExpiresAt: string = result.execution_lease_expires_at;
+        return [operationId, leaseExpiresAt];
       }
       const accountsChecked: number = result.accounts_checked;
       const accepted: number = result.accepted;
@@ -1144,6 +1174,7 @@ describe("Inbox", () => {
       return [accountsChecked, accepted, suppressed, duplicates, read];
     };
 
+    expect(checkInvalidInProgress).toBeTypeOf("function");
     expect(checkNarrowing).toBeTypeOf("function");
     expect([xBackfillResult, confirmationRequired, completed]).toHaveLength(3);
   });

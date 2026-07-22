@@ -142,7 +142,7 @@ export type XInboxBackfillResult =
       confirmation_operation_id: string;
       execution_lease_expires_at: string;
       estimated_x_credits?: number;
-      confirmation_required?: boolean;
+      confirmation_required?: false;
       confirmation_token?: string;
       confirmation_expires_at?: string;
       accounts_checked?: number;
