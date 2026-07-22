@@ -44,6 +44,39 @@ type ScopedInboxListResult = Awaited<
   ReturnType<ReturnType<UniPost["inbox"]["workspace"]>["list"]>
 >;
 type ScopedInboxListResultIsExact = Assert<Equal<ScopedInboxListResult, InboxListResponse>>;
+type ExpectedScopedInboxListParameters = [params?: InboxListParams];
+type ManagedUserScopedInboxList = ReturnType<UniPost["inbox"]["managedUser"]>["list"];
+type ManagedUserScopedInboxListParameters = Parameters<ManagedUserScopedInboxList>;
+type ManagedUserScopedInboxListParameter = ManagedUserScopedInboxListParameters[0];
+type ManagedUserScopedInboxListResult = Awaited<ReturnType<ManagedUserScopedInboxList>>;
+type ManagedUserScopedInboxListParametersAreExact = Assert<
+  Equal<ManagedUserScopedInboxListParameters, ExpectedScopedInboxListParameters>
+>;
+type ManagedUserScopedInboxListParameterIsNotAny = Assert<
+  Equal<IsAny<ManagedUserScopedInboxListParameter>, false>
+>;
+type ManagedUserScopedInboxListResultIsExact = Assert<
+  Equal<ManagedUserScopedInboxListResult, InboxListResponse>
+>;
+type ManagedUserScopedInboxListResultIsNotAny = Assert<
+  Equal<IsAny<ManagedUserScopedInboxListResult>, false>
+>;
+type WorkspaceScopedInboxList = ReturnType<UniPost["inbox"]["workspace"]>["list"];
+type WorkspaceScopedInboxListParameters = Parameters<WorkspaceScopedInboxList>;
+type WorkspaceScopedInboxListParameter = WorkspaceScopedInboxListParameters[0];
+type WorkspaceScopedInboxListResult = Awaited<ReturnType<WorkspaceScopedInboxList>>;
+type WorkspaceScopedInboxListParametersAreExact = Assert<
+  Equal<WorkspaceScopedInboxListParameters, ExpectedScopedInboxListParameters>
+>;
+type WorkspaceScopedInboxListParameterIsNotAny = Assert<
+  Equal<IsAny<WorkspaceScopedInboxListParameter>, false>
+>;
+type WorkspaceScopedInboxListResultIsExact = Assert<
+  Equal<WorkspaceScopedInboxListResult, InboxListResponse>
+>;
+type WorkspaceScopedInboxListResultIsNotAny = Assert<
+  Equal<IsAny<WorkspaceScopedInboxListResult>, false>
+>;
 type InboxListParamsContract = Pick<InboxListParams, keyof ExpectedInboxListParams>;
 
 const item = {
