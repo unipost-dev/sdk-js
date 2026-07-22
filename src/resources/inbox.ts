@@ -96,14 +96,14 @@ export class ScopedInbox {
 
   async get(id: string): Promise<InboxItem> {
     const response = await this.#http.get<InboxDataWireResponse<InboxItem>>(
-      `/v1/inbox/${encodeURIComponent(id)}`,
+      `/v1/inbox/${encodeInboxPathSegment(id, "item")}`,
       this.#scopeQuery(),
     );
     return response.data;
   }
 
   async markRead(id: string): Promise<void> {
-    await this.#post<void>(`/v1/inbox/${encodeURIComponent(id)}/read`);
+    await this.#post<void>(`/v1/inbox/${encodeInboxPathSegment(id, "item")}/read`);
   }
 
   async markAllRead(): Promise<InboxMarkAllReadResult> {
@@ -123,7 +123,7 @@ export class ScopedInbox {
     if (request.assignedTo !== undefined) body.assigned_to = request.assignedTo;
 
     const response = await this.#post<InboxDataWireResponse<InboxItem>>(
-      `/v1/inbox/${encodeURIComponent(id)}/thread-state`,
+      `/v1/inbox/${encodeInboxPathSegment(id, "item")}/thread-state`,
       body,
     );
     return response.data;
@@ -131,38 +131,47 @@ export class ScopedInbox {
 
   async mediaContext(id: string): Promise<InboxMediaContext> {
     const response = await this.#http.get<InboxDataWireResponse<InboxMediaContext>>(
-      `/v1/inbox/${encodeURIComponent(id)}/media-context`,
+      `/v1/inbox/${encodeInboxPathSegment(id, "item")}/media-context`,
       this.#scopeQuery(),
     );
     return response.data;
   }
 
+  sync(): Promise<InboxSyncResult>;
+  sync(request: InboxSyncRequest): Promise<XInboxBackfillResult>;
   async sync(request?: InboxSyncRequest): Promise<InboxSyncResult | XInboxBackfillResult> {
-    let body: { x_backfill: XInboxBackfillWireRequest } | undefined;
-    if (request?.xBackfill !== undefined) {
-      const source = request.xBackfill;
-      const xBackfill: XInboxBackfillWireRequest = {
-        include_replies: source.includeReplies,
-        include_dms: source.includeDms,
-      };
-      if (source.accountId !== undefined) xBackfill.account_id = source.accountId;
-      if (source.lookbackDays !== undefined) xBackfill.lookback_days = source.lookbackDays;
-      if (source.maxItems !== undefined) xBackfill.max_items = source.maxItems;
-      if (source.confirmationToken !== undefined) {
-        xBackfill.confirmation_token = source.confirmationToken;
-      }
-      body = { x_backfill: xBackfill };
+    if (request === undefined) {
+      const response = await this.#post<InboxDataWireResponse<InboxSyncResult>>(
+        "/v1/inbox/sync",
+      );
+      return response.data;
     }
 
-    const response = await this.#post<
-      InboxDataWireResponse<InboxSyncResult | XInboxBackfillResult>
-    >("/v1/inbox/sync", body);
+    const source = request.xBackfill;
+    if (source === undefined) {
+      throw new Error("Inbox sync request requires xBackfill.");
+    }
+    const xBackfill: XInboxBackfillWireRequest = {
+      include_replies: source.includeReplies,
+      include_dms: source.includeDms,
+    };
+    if (source.accountId !== undefined) xBackfill.account_id = source.accountId;
+    if (source.lookbackDays !== undefined) xBackfill.lookback_days = source.lookbackDays;
+    if (source.maxItems !== undefined) xBackfill.max_items = source.maxItems;
+    if (source.confirmationToken !== undefined) {
+      xBackfill.confirmation_token = source.confirmationToken;
+    }
+
+    const response = await this.#post<InboxDataWireResponse<XInboxBackfillResult>>(
+      "/v1/inbox/sync",
+      { x_backfill: xBackfill },
+    );
     return response.data;
   }
 
   async xOutboundStatus(requestId: string): Promise<XInboxOutboundStatus> {
     const response = await this.#http.get<InboxDataWireResponse<XInboxOutboundStatus>>(
-      `/v1/inbox/x-outbound-operations/${encodeURIComponent(requestId)}`,
+      `/v1/inbox/x-outbound-operations/${encodeInboxPathSegment(requestId, "request")}`,
       this.#scopeQuery(),
     );
     return response.data;
@@ -182,7 +191,7 @@ export class ScopedInbox {
       : { "Idempotency-Key": options.idempotencyKey };
     const response = await this.#http.requestWithResponse<InboxReplyWireResponse>(
       "POST",
-      `/v1/inbox/${encodeURIComponent(id)}/reply`,
+      `/v1/inbox/${encodeInboxPathSegment(id, "item")}/reply`,
       {
         body: { text: request.text },
         query: this.#scopeQuery(),
@@ -230,6 +239,13 @@ export class ScopedInbox {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function encodeInboxPathSegment(value: string, kind: "item" | "request"): string {
+  if (value === "" || value === "." || value === "..") {
+    throw new Error(`Inbox ${kind} ID must be a non-empty, non-dot path segment.`);
+  }
+  return encodeURIComponent(value);
 }
 
 export class Inbox {

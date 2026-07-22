@@ -82,7 +82,7 @@ interface XInboxBackfillRequest {
     confirmationToken?: string;
 }
 interface InboxSyncRequest {
-    xBackfill?: XInboxBackfillRequest;
+    xBackfill: XInboxBackfillRequest;
 }
 interface InboxSyncError {
     account_id: string;
@@ -113,21 +113,49 @@ interface XInboxBackfillAccountResult {
     stop_reason?: string;
     missing_scopes?: string[];
 }
-interface XInboxBackfillResult {
+type XInboxBackfillResult = {
+    status: "in_progress";
+    confirmation_operation_id: string;
+    execution_lease_expires_at: string;
     estimated_x_credits?: number;
     confirmation_required?: boolean;
-    confirmation_operation_id?: string;
     confirmation_token?: string;
     confirmation_expires_at?: string;
-    execution_lease_expires_at?: string;
-    status?: "in_progress";
     accounts_checked?: number;
     accepted?: number;
     suppressed?: number;
     duplicates?: number;
     read?: number;
     details?: XInboxBackfillAccountResult[];
-}
+} | {
+    status?: never;
+    confirmation_required: true;
+    confirmation_token: string;
+    confirmation_expires_at: string;
+    accounts_checked: number;
+    estimated_x_credits?: number;
+    confirmation_operation_id?: string;
+    execution_lease_expires_at?: string;
+    accepted?: number;
+    suppressed?: number;
+    duplicates?: number;
+    read?: number;
+    details?: XInboxBackfillAccountResult[];
+} | {
+    status?: never;
+    confirmation_required: false;
+    accounts_checked: number;
+    accepted: number;
+    suppressed: number;
+    duplicates: number;
+    read: number;
+    estimated_x_credits?: number;
+    confirmation_operation_id?: string;
+    confirmation_token?: string;
+    confirmation_expires_at?: string;
+    execution_lease_expires_at?: string;
+    details?: XInboxBackfillAccountResult[];
+};
 interface XInboxOutboundStatus {
     id: string;
     status: string;
@@ -1056,7 +1084,8 @@ declare class ScopedInbox {
     markAllRead(): Promise<InboxMarkAllReadResult>;
     updateThreadState(id: string, request: InboxThreadStateRequest): Promise<InboxItem>;
     mediaContext(id: string): Promise<InboxMediaContext>;
-    sync(request?: InboxSyncRequest): Promise<InboxSyncResult | XInboxBackfillResult>;
+    sync(): Promise<InboxSyncResult>;
+    sync(request: InboxSyncRequest): Promise<XInboxBackfillResult>;
     xOutboundStatus(requestId: string): Promise<XInboxOutboundStatus>;
     webSocketConnectionDetails(): InboxWebSocketConnectionDetails;
     reply(id: string, request: InboxReplyRequest, options?: InboxReplyOptions): Promise<InboxReplyResult>;

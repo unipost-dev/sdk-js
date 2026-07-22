@@ -80,7 +80,7 @@ type ExpectedXInboxBackfillRequest = {
   includeDms: boolean;
   confirmationToken?: string;
 };
-type ExpectedInboxSyncRequest = { xBackfill?: XInboxBackfillRequest };
+type ExpectedInboxSyncRequest = { xBackfill: XInboxBackfillRequest };
 type ExpectedInboxSyncResult = {
   new_items: number;
   accounts_checked: number;
@@ -108,21 +108,52 @@ type ExpectedXInboxBackfillAccountResult = {
   stop_reason?: string;
   missing_scopes?: string[];
 };
-type ExpectedXInboxBackfillResult = {
-  estimated_x_credits?: number;
-  confirmation_required?: boolean;
-  confirmation_operation_id?: string;
-  confirmation_token?: string;
-  confirmation_expires_at?: string;
-  execution_lease_expires_at?: string;
-  status?: "in_progress";
-  accounts_checked?: number;
-  accepted?: number;
-  suppressed?: number;
-  duplicates?: number;
-  read?: number;
-  details?: XInboxBackfillAccountResult[];
-};
+type ExpectedXInboxBackfillResult =
+  | {
+      status: "in_progress";
+      confirmation_operation_id: string;
+      execution_lease_expires_at: string;
+      estimated_x_credits?: number;
+      confirmation_required?: boolean;
+      confirmation_token?: string;
+      confirmation_expires_at?: string;
+      accounts_checked?: number;
+      accepted?: number;
+      suppressed?: number;
+      duplicates?: number;
+      read?: number;
+      details?: XInboxBackfillAccountResult[];
+    }
+  | {
+      status?: never;
+      confirmation_required: true;
+      confirmation_token: string;
+      confirmation_expires_at: string;
+      accounts_checked: number;
+      estimated_x_credits?: number;
+      confirmation_operation_id?: string;
+      execution_lease_expires_at?: string;
+      accepted?: number;
+      suppressed?: number;
+      duplicates?: number;
+      read?: number;
+      details?: XInboxBackfillAccountResult[];
+    }
+  | {
+      status?: never;
+      confirmation_required: false;
+      accounts_checked: number;
+      accepted: number;
+      suppressed: number;
+      duplicates: number;
+      read: number;
+      estimated_x_credits?: number;
+      confirmation_operation_id?: string;
+      confirmation_token?: string;
+      confirmation_expires_at?: string;
+      execution_lease_expires_at?: string;
+      details?: XInboxBackfillAccountResult[];
+    };
 type ExpectedXInboxOutboundStatus = {
   id: string;
   status: string;
@@ -326,16 +357,14 @@ type ScopedInboxMediaContextResultIsExact = Assert<
 type ScopedInboxMediaContextResultIsNotAny = Assert<
   Equal<IsAny<ScopedInboxMediaContextResult>, false>
 >;
-type ScopedInboxSyncParametersAreExact = Assert<
-  Equal<Parameters<ScopedInbox["sync"]>, [request?: InboxSyncRequest]>
+type ScopedInboxSyncOverloadsAreExact = Assert<
+  ScopedInbox["sync"] extends {
+    (): Promise<InboxSyncResult>;
+    (request: InboxSyncRequest): Promise<XInboxBackfillResult>;
+  }
+    ? true
+    : false
 >;
-type ScopedInboxSyncRequest = Parameters<ScopedInbox["sync"]>[0];
-type ScopedInboxSyncRequestIsNotAny = Assert<Equal<IsAny<ScopedInboxSyncRequest>, false>>;
-type ScopedInboxSyncResult = Awaited<ReturnType<ScopedInbox["sync"]>>;
-type ScopedInboxSyncResultIsExact = Assert<
-  Equal<ScopedInboxSyncResult, InboxSyncResult | XInboxBackfillResult>
->;
-type ScopedInboxSyncResultIsNotAny = Assert<Equal<IsAny<ScopedInboxSyncResult>, false>>;
 type ScopedInboxXOutboundStatusParametersAreExact = Assert<
   Equal<Parameters<ScopedInbox["xOutboundStatus"]>, [requestId: string]>
 >;
@@ -401,6 +430,8 @@ const syncResult: InboxSyncResult = {
 
 const xBackfillResult: XInboxBackfillResult = {
   status: "in_progress",
+  confirmation_operation_id: "confirm_operation_1",
+  execution_lease_expires_at: "2026-07-22T01:30:00Z",
   estimated_x_credits: 42,
   confirmation_required: false,
   accounts_checked: 1,
@@ -987,6 +1018,135 @@ describe("Inbox", () => {
       );
     },
   );
+
+  it.each(
+    ["", ".", ".."].flatMap((id) => [
+      {
+        method: "get",
+        id,
+        invoke: (scoped: ScopedInbox) => scoped.get(id),
+      },
+      {
+        method: "markRead",
+        id,
+        invoke: (scoped: ScopedInbox) => scoped.markRead(id),
+      },
+      {
+        method: "reply",
+        id,
+        invoke: (scoped: ScopedInbox) => scoped.reply(id, { text: "Reply" }),
+      },
+      {
+        method: "updateThreadState",
+        id,
+        invoke: (scoped: ScopedInbox) =>
+          scoped.updateThreadState(id, { threadStatus: "resolved" }),
+      },
+      {
+        method: "mediaContext",
+        id,
+        invoke: (scoped: ScopedInbox) => scoped.mediaContext(id),
+      },
+      {
+        method: "xOutboundStatus",
+        id,
+        invoke: (scoped: ScopedInbox) => scoped.xOutboundStatus(id),
+      },
+    ]),
+  )("rejects path segment $id for $method before fetch", async ({ invoke }) => {
+    await expect(invoke(client.inbox.workspace())).rejects.toThrow(
+      /Inbox (?:item|request) ID/i,
+    );
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it("treats explicit undefined sync as an ordinary sync without a body", async () => {
+    mockFetch.mockResolvedValueOnce(jsonResponse({ data: syncResult }));
+    const scoped = client.inbox.workspace();
+    const syncFromJavaScript = scoped.sync.bind(scoped) as unknown as (
+      request: undefined,
+    ) => Promise<InboxSyncResult>;
+
+    const result = await syncFromJavaScript(undefined);
+
+    expect(result).toEqual(syncResult);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+    expect(init.body).toBeUndefined();
+  });
+
+  it("rejects a hostile empty sync request before fetch", async () => {
+    const hostileRequest = {} as unknown as InboxSyncRequest;
+
+    await expect(client.inbox.workspace().sync(hostileRequest)).rejects.toThrow(
+      /xBackfill/i,
+    );
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it("correlates ordinary and X backfill sync overloads at typecheck time", () => {
+    const checkSyncOverloads = (scoped: ScopedInbox) => {
+      const ordinary = scoped.sync();
+      const backfill = scoped.sync({
+        xBackfill: {
+          includeReplies: true,
+          includeDms: false,
+        },
+      });
+      type OrdinaryResult = Awaited<typeof ordinary>;
+      type BackfillResult = Awaited<typeof backfill>;
+      type OrdinaryResultIsExact = Assert<Equal<OrdinaryResult, InboxSyncResult>>;
+      type OrdinaryResultIsNotAny = Assert<Equal<IsAny<OrdinaryResult>, false>>;
+      type BackfillResultIsExact = Assert<Equal<BackfillResult, XInboxBackfillResult>>;
+      type BackfillResultIsNotAny = Assert<Equal<IsAny<BackfillResult>, false>>;
+
+      // @ts-expect-error a supplied sync request must contain xBackfill.
+      scoped.sync({});
+    };
+
+    expect(checkSyncOverloads).toBeTypeOf("function");
+  });
+
+  it("narrows all production X backfill response shapes at typecheck time", () => {
+    const confirmationRequired: XInboxBackfillResult = {
+      confirmation_required: true,
+      confirmation_token: "confirmation_token_1",
+      confirmation_expires_at: "2026-07-22T02:00:00Z",
+      accounts_checked: 2,
+      estimated_x_credits: 50,
+    };
+    const completed: XInboxBackfillResult = {
+      confirmation_required: false,
+      accounts_checked: 2,
+      accepted: 8,
+      suppressed: 1,
+      duplicates: 2,
+      read: 11,
+      details: [],
+    };
+    const checkNarrowing = (result: XInboxBackfillResult) => {
+      if (result.status === "in_progress") {
+        const operationId: string = result.confirmation_operation_id;
+        const leaseExpiresAt: string = result.execution_lease_expires_at;
+        return [operationId, leaseExpiresAt];
+      }
+      if (result.confirmation_required) {
+        const token: string = result.confirmation_token;
+        const expiresAt: string = result.confirmation_expires_at;
+        const accountsChecked: number = result.accounts_checked;
+        return [token, expiresAt, accountsChecked];
+      }
+      const accountsChecked: number = result.accounts_checked;
+      const accepted: number = result.accepted;
+      const suppressed: number = result.suppressed;
+      const duplicates: number = result.duplicates;
+      const read: number = result.read;
+      return [accountsChecked, accepted, suppressed, duplicates, read];
+    };
+
+    expect(checkNarrowing).toBeTypeOf("function");
+    expect([xBackfillResult, confirmationRequired, completed]).toHaveLength(3);
+  });
 
   it("omits assigned_to when updating thread state without an assignee", async () => {
     mockFetch.mockResolvedValueOnce(

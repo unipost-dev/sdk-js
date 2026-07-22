@@ -100,7 +100,7 @@ export interface XInboxBackfillRequest {
 }
 
 export interface InboxSyncRequest {
-  xBackfill?: XInboxBackfillRequest;
+  xBackfill: XInboxBackfillRequest;
 }
 
 export interface InboxSyncError {
@@ -136,21 +136,52 @@ export interface XInboxBackfillAccountResult {
   missing_scopes?: string[];
 }
 
-export interface XInboxBackfillResult {
-  estimated_x_credits?: number;
-  confirmation_required?: boolean;
-  confirmation_operation_id?: string;
-  confirmation_token?: string;
-  confirmation_expires_at?: string;
-  execution_lease_expires_at?: string;
-  status?: "in_progress";
-  accounts_checked?: number;
-  accepted?: number;
-  suppressed?: number;
-  duplicates?: number;
-  read?: number;
-  details?: XInboxBackfillAccountResult[];
-}
+export type XInboxBackfillResult =
+  | {
+      status: "in_progress";
+      confirmation_operation_id: string;
+      execution_lease_expires_at: string;
+      estimated_x_credits?: number;
+      confirmation_required?: boolean;
+      confirmation_token?: string;
+      confirmation_expires_at?: string;
+      accounts_checked?: number;
+      accepted?: number;
+      suppressed?: number;
+      duplicates?: number;
+      read?: number;
+      details?: XInboxBackfillAccountResult[];
+    }
+  | {
+      status?: never;
+      confirmation_required: true;
+      confirmation_token: string;
+      confirmation_expires_at: string;
+      accounts_checked: number;
+      estimated_x_credits?: number;
+      confirmation_operation_id?: string;
+      execution_lease_expires_at?: string;
+      accepted?: number;
+      suppressed?: number;
+      duplicates?: number;
+      read?: number;
+      details?: XInboxBackfillAccountResult[];
+    }
+  | {
+      status?: never;
+      confirmation_required: false;
+      accounts_checked: number;
+      accepted: number;
+      suppressed: number;
+      duplicates: number;
+      read: number;
+      estimated_x_credits?: number;
+      confirmation_operation_id?: string;
+      confirmation_token?: string;
+      confirmation_expires_at?: string;
+      execution_lease_expires_at?: string;
+      details?: XInboxBackfillAccountResult[];
+    };
 
 export interface XInboxOutboundStatus {
   id: string;

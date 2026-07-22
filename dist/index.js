@@ -1205,13 +1205,13 @@ var ScopedInbox = class {
   }
   async get(id) {
     const response = await this.#http.get(
-      `/v1/inbox/${encodeURIComponent(id)}`,
+      `/v1/inbox/${encodeInboxPathSegment(id, "item")}`,
       this.#scopeQuery()
     );
     return response.data;
   }
   async markRead(id) {
-    await this.#post(`/v1/inbox/${encodeURIComponent(id)}/read`);
+    await this.#post(`/v1/inbox/${encodeInboxPathSegment(id, "item")}/read`);
   }
   async markAllRead() {
     const response = await this.#post(
@@ -1225,40 +1225,48 @@ var ScopedInbox = class {
     };
     if (request.assignedTo !== void 0) body.assigned_to = request.assignedTo;
     const response = await this.#post(
-      `/v1/inbox/${encodeURIComponent(id)}/thread-state`,
+      `/v1/inbox/${encodeInboxPathSegment(id, "item")}/thread-state`,
       body
     );
     return response.data;
   }
   async mediaContext(id) {
     const response = await this.#http.get(
-      `/v1/inbox/${encodeURIComponent(id)}/media-context`,
+      `/v1/inbox/${encodeInboxPathSegment(id, "item")}/media-context`,
       this.#scopeQuery()
     );
     return response.data;
   }
   async sync(request) {
-    let body;
-    if (request?.xBackfill !== void 0) {
-      const source = request.xBackfill;
-      const xBackfill = {
-        include_replies: source.includeReplies,
-        include_dms: source.includeDms
-      };
-      if (source.accountId !== void 0) xBackfill.account_id = source.accountId;
-      if (source.lookbackDays !== void 0) xBackfill.lookback_days = source.lookbackDays;
-      if (source.maxItems !== void 0) xBackfill.max_items = source.maxItems;
-      if (source.confirmationToken !== void 0) {
-        xBackfill.confirmation_token = source.confirmationToken;
-      }
-      body = { x_backfill: xBackfill };
+    if (request === void 0) {
+      const response2 = await this.#post(
+        "/v1/inbox/sync"
+      );
+      return response2.data;
     }
-    const response = await this.#post("/v1/inbox/sync", body);
+    const source = request.xBackfill;
+    if (source === void 0) {
+      throw new Error("Inbox sync request requires xBackfill.");
+    }
+    const xBackfill = {
+      include_replies: source.includeReplies,
+      include_dms: source.includeDms
+    };
+    if (source.accountId !== void 0) xBackfill.account_id = source.accountId;
+    if (source.lookbackDays !== void 0) xBackfill.lookback_days = source.lookbackDays;
+    if (source.maxItems !== void 0) xBackfill.max_items = source.maxItems;
+    if (source.confirmationToken !== void 0) {
+      xBackfill.confirmation_token = source.confirmationToken;
+    }
+    const response = await this.#post(
+      "/v1/inbox/sync",
+      { x_backfill: xBackfill }
+    );
     return response.data;
   }
   async xOutboundStatus(requestId) {
     const response = await this.#http.get(
-      `/v1/inbox/x-outbound-operations/${encodeURIComponent(requestId)}`,
+      `/v1/inbox/x-outbound-operations/${encodeInboxPathSegment(requestId, "request")}`,
       this.#scopeQuery()
     );
     return response.data;
@@ -1270,7 +1278,7 @@ var ScopedInbox = class {
     const headers = options?.idempotencyKey === void 0 ? void 0 : { "Idempotency-Key": options.idempotencyKey };
     const response = await this.#http.requestWithResponse(
       "POST",
-      `/v1/inbox/${encodeURIComponent(id)}/reply`,
+      `/v1/inbox/${encodeInboxPathSegment(id, "item")}/reply`,
       {
         body: { text: request.text },
         query: this.#scopeQuery(),
@@ -1308,6 +1316,12 @@ var ScopedInbox = class {
 };
 function isRecord(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function encodeInboxPathSegment(value, kind) {
+  if (value === "" || value === "." || value === "..") {
+    throw new Error(`Inbox ${kind} ID must be a non-empty, non-dot path segment.`);
+  }
+  return encodeURIComponent(value);
 }
 var Inbox = class {
   #http;
