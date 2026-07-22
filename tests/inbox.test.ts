@@ -5,6 +5,16 @@ import type { InboxListParams } from "../src/index.js";
 const mockFetch = vi.fn();
 vi.stubGlobal("fetch", mockFetch);
 
+type InboxListParamKey = "source" | "isRead" | "isOwn" | "limit";
+type Equal<Left, Right> =
+  (<Value>() => Value extends Left ? 1 : 2) extends
+  (<Value>() => Value extends Right ? 1 : 2)
+    ? true
+    : false;
+type Assert<Condition extends true> = Condition;
+type InboxListParamsHasExactKeys = Assert<Equal<keyof InboxListParams, InboxListParamKey>>;
+type InboxListParamsContract = Pick<InboxListParams, InboxListParamKey>;
+
 const item = {
   id: "inbox_1",
   social_account_id: "sa_1",
@@ -63,6 +73,9 @@ describe("Inbox", () => {
 
     const url = requestedUrl();
     expect(url.pathname).toBe("/v1/inbox");
+    expect(url.search).toBe(
+      "?inbox_scope=managed_user&external_user_id=user+A&source=ig_comment&is_read=false&is_own=false&limit=50",
+    );
     expect(url.searchParams.getAll("inbox_scope")).toEqual(["managed_user"]);
     expect(url.searchParams.getAll("external_user_id")).toEqual(["user A"]);
     expect(url.searchParams.getAll("source")).toEqual(["ig_comment"]);
@@ -82,6 +95,7 @@ describe("Inbox", () => {
 
     const url = requestedUrl();
     expect(url.pathname).toBe("/v1/inbox");
+    expect(url.search).toBe("?inbox_scope=workspace");
     expect(url.searchParams.getAll("inbox_scope")).toEqual(["workspace"]);
     expect(url.searchParams.has("external_user_id")).toBe(false);
   });
@@ -96,7 +110,7 @@ describe("Inbox", () => {
   );
 
   it("keeps scope keys out of list params and ignores hostile runtime injection", async () => {
-    const checkListParams = (_params: InboxListParams) => undefined;
+    const checkListParams = (_params: InboxListParamsContract) => undefined;
 
     checkListParams({ source: "ig_comment", isRead: false, isOwn: false, limit: 50 });
     // @ts-expect-error inbox_scope is bound by managedUser() or workspace(), not caller input.
