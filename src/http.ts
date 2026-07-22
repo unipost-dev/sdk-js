@@ -2,7 +2,7 @@ import { parseApiError, RateLimitError } from "./errors.js";
 import type { InboxWebSocketConnectionDetails } from "./types/inbox.js";
 
 const MAX_RETRIES = 2;
-const SDK_VERSION = "0.5.0";
+const SDK_VERSION = "0.6.0";
 const USER_AGENT = `@unipost/sdk/${SDK_VERSION}`;
 
 export interface HttpClientOptions {

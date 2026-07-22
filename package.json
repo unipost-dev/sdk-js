@@ -1,15 +1,15 @@
 {
   "name": "@unipost/sdk",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Official UniPost API client for JavaScript and TypeScript",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
+      "types": "./dist/index.d.ts",
       "import": "./dist/index.mjs",
-      "require": "./dist/index.js",
-      "types": "./dist/index.d.ts"
+      "require": "./dist/index.js"
     }
   },
   "files": [
