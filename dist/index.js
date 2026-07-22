@@ -363,6 +363,23 @@ var HttpClient = class {
       reader.releaseLock();
     }
   }
+  inboxWebSocketConnectionDetails(query) {
+    const url = new URL("/v1/inbox/ws", this.baseUrl);
+    if (url.protocol === "https:") {
+      url.protocol = "wss:";
+    } else if (url.protocol === "http:") {
+      url.protocol = "ws:";
+    } else {
+      throw new Error("WebSocket connections require an HTTP or HTTPS base URL protocol.");
+    }
+    for (const [key, value] of Object.entries(query)) {
+      if (value !== void 0 && value !== null && value !== "") {
+        url.searchParams.set(key, String(value));
+      }
+    }
+    const headers = Object.freeze({ Authorization: `Bearer ${this.apiKey}` });
+    return Object.freeze({ url: url.toString(), headers });
+  }
   get(path, query) {
     return this.request("GET", path, { query });
   }
@@ -1161,6 +1178,13 @@ var ScopedInbox = class {
     }
     return query;
   }
+  #post(path, body) {
+    return this.#http.request("POST", path, {
+      body,
+      query: this.#scopeQuery(),
+      retryRateLimits: false
+    });
+  }
   async list(params) {
     const query = this.#scopeQuery();
     if (params?.source !== void 0) query.source = params.source;
@@ -1171,6 +1195,76 @@ var ScopedInbox = class {
     const result = { data: response.data };
     if (response.request_id !== void 0) result.requestId = response.request_id;
     return result;
+  }
+  async unreadCount() {
+    const response = await this.#http.get(
+      "/v1/inbox/unread-count",
+      this.#scopeQuery()
+    );
+    return response.data;
+  }
+  async get(id) {
+    const response = await this.#http.get(
+      `/v1/inbox/${encodeURIComponent(id)}`,
+      this.#scopeQuery()
+    );
+    return response.data;
+  }
+  async markRead(id) {
+    await this.#post(`/v1/inbox/${encodeURIComponent(id)}/read`);
+  }
+  async markAllRead() {
+    const response = await this.#post(
+      "/v1/inbox/mark-all-read"
+    );
+    return response.data;
+  }
+  async updateThreadState(id, request) {
+    const body = {
+      thread_status: request.threadStatus
+    };
+    if (request.assignedTo !== void 0) body.assigned_to = request.assignedTo;
+    const response = await this.#post(
+      `/v1/inbox/${encodeURIComponent(id)}/thread-state`,
+      body
+    );
+    return response.data;
+  }
+  async mediaContext(id) {
+    const response = await this.#http.get(
+      `/v1/inbox/${encodeURIComponent(id)}/media-context`,
+      this.#scopeQuery()
+    );
+    return response.data;
+  }
+  async sync(request) {
+    let body;
+    if (request?.xBackfill !== void 0) {
+      const source = request.xBackfill;
+      const xBackfill = {
+        include_replies: source.includeReplies,
+        include_dms: source.includeDms
+      };
+      if (source.accountId !== void 0) xBackfill.account_id = source.accountId;
+      if (source.lookbackDays !== void 0) xBackfill.lookback_days = source.lookbackDays;
+      if (source.maxItems !== void 0) xBackfill.max_items = source.maxItems;
+      if (source.confirmationToken !== void 0) {
+        xBackfill.confirmation_token = source.confirmationToken;
+      }
+      body = { x_backfill: xBackfill };
+    }
+    const response = await this.#post("/v1/inbox/sync", body);
+    return response.data;
+  }
+  async xOutboundStatus(requestId) {
+    const response = await this.#http.get(
+      `/v1/inbox/x-outbound-operations/${encodeURIComponent(requestId)}`,
+      this.#scopeQuery()
+    );
+    return response.data;
+  }
+  webSocketConnectionDetails() {
+    return this.#http.inboxWebSocketConnectionDetails(this.#scopeQuery());
   }
   async reply(id, request, options) {
     const headers = options?.idempotencyKey === void 0 ? void 0 : { "Idempotency-Key": options.idempotencyKey };

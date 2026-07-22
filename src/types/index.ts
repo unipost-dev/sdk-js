@@ -51,6 +51,19 @@ export type {
   InboxReplyRequest,
   InboxReplyOptions,
   InboxReplyResult,
+  InboxUnreadCountResult,
+  InboxMarkAllReadResult,
+  InboxThreadStateRequest,
+  InboxMediaContext,
+  XInboxBackfillRequest,
+  InboxSyncRequest,
+  InboxSyncError,
+  InboxSyncAccountDetail,
+  InboxSyncResult,
+  XInboxBackfillAccountResult,
+  XInboxBackfillResult,
+  XInboxOutboundStatus,
+  InboxWebSocketConnectionDetails,
 } from "./inbox.js";
 
 // --- Workspace ---

@@ -3,9 +3,18 @@ import type {
   InboxItem,
   InboxListParams,
   InboxListResponse,
+  InboxMarkAllReadResult,
+  InboxMediaContext,
   InboxReplyOptions,
   InboxReplyRequest,
   InboxReplyResult,
+  InboxSyncRequest,
+  InboxSyncResult,
+  InboxThreadStateRequest,
+  InboxUnreadCountResult,
+  InboxWebSocketConnectionDetails,
+  XInboxBackfillResult,
+  XInboxOutboundStatus,
 } from "../types/index.js";
 
 type InboxScope =
@@ -26,6 +35,19 @@ interface InboxReplyWireResponse {
   request_id?: string;
 }
 
+interface InboxDataWireResponse<T> {
+  data: T;
+}
+
+interface XInboxBackfillWireRequest {
+  account_id?: string;
+  lookback_days?: number;
+  max_items?: number;
+  include_replies: boolean;
+  include_dms: boolean;
+  confirmation_token?: string;
+}
+
 export class ScopedInbox {
   readonly #http: HttpClient;
   readonly #scope: InboxScope;
@@ -43,6 +65,14 @@ export class ScopedInbox {
     return query;
   }
 
+  #post<T>(path: string, body?: unknown): Promise<T> {
+    return this.#http.request<T>("POST", path, {
+      body,
+      query: this.#scopeQuery(),
+      retryRateLimits: false,
+    });
+  }
+
   async list(params?: InboxListParams): Promise<InboxListResponse> {
     const query: Record<string, string | number | boolean> = this.#scopeQuery();
     if (params?.source !== undefined) query.source = params.source;
@@ -54,6 +84,92 @@ export class ScopedInbox {
     const result: InboxListResponse = { data: response.data };
     if (response.request_id !== undefined) result.requestId = response.request_id;
     return result;
+  }
+
+  async unreadCount(): Promise<InboxUnreadCountResult> {
+    const response = await this.#http.get<InboxDataWireResponse<InboxUnreadCountResult>>(
+      "/v1/inbox/unread-count",
+      this.#scopeQuery(),
+    );
+    return response.data;
+  }
+
+  async get(id: string): Promise<InboxItem> {
+    const response = await this.#http.get<InboxDataWireResponse<InboxItem>>(
+      `/v1/inbox/${encodeURIComponent(id)}`,
+      this.#scopeQuery(),
+    );
+    return response.data;
+  }
+
+  async markRead(id: string): Promise<void> {
+    await this.#post<void>(`/v1/inbox/${encodeURIComponent(id)}/read`);
+  }
+
+  async markAllRead(): Promise<InboxMarkAllReadResult> {
+    const response = await this.#post<InboxDataWireResponse<InboxMarkAllReadResult>>(
+      "/v1/inbox/mark-all-read",
+    );
+    return response.data;
+  }
+
+  async updateThreadState(
+    id: string,
+    request: InboxThreadStateRequest,
+  ): Promise<InboxItem> {
+    const body: { thread_status: InboxThreadStateRequest["threadStatus"]; assigned_to?: string } = {
+      thread_status: request.threadStatus,
+    };
+    if (request.assignedTo !== undefined) body.assigned_to = request.assignedTo;
+
+    const response = await this.#post<InboxDataWireResponse<InboxItem>>(
+      `/v1/inbox/${encodeURIComponent(id)}/thread-state`,
+      body,
+    );
+    return response.data;
+  }
+
+  async mediaContext(id: string): Promise<InboxMediaContext> {
+    const response = await this.#http.get<InboxDataWireResponse<InboxMediaContext>>(
+      `/v1/inbox/${encodeURIComponent(id)}/media-context`,
+      this.#scopeQuery(),
+    );
+    return response.data;
+  }
+
+  async sync(request?: InboxSyncRequest): Promise<InboxSyncResult | XInboxBackfillResult> {
+    let body: { x_backfill: XInboxBackfillWireRequest } | undefined;
+    if (request?.xBackfill !== undefined) {
+      const source = request.xBackfill;
+      const xBackfill: XInboxBackfillWireRequest = {
+        include_replies: source.includeReplies,
+        include_dms: source.includeDms,
+      };
+      if (source.accountId !== undefined) xBackfill.account_id = source.accountId;
+      if (source.lookbackDays !== undefined) xBackfill.lookback_days = source.lookbackDays;
+      if (source.maxItems !== undefined) xBackfill.max_items = source.maxItems;
+      if (source.confirmationToken !== undefined) {
+        xBackfill.confirmation_token = source.confirmationToken;
+      }
+      body = { x_backfill: xBackfill };
+    }
+
+    const response = await this.#post<
+      InboxDataWireResponse<InboxSyncResult | XInboxBackfillResult>
+    >("/v1/inbox/sync", body);
+    return response.data;
+  }
+
+  async xOutboundStatus(requestId: string): Promise<XInboxOutboundStatus> {
+    const response = await this.#http.get<InboxDataWireResponse<XInboxOutboundStatus>>(
+      `/v1/inbox/x-outbound-operations/${encodeURIComponent(requestId)}`,
+      this.#scopeQuery(),
+    );
+    return response.data;
+  }
+
+  webSocketConnectionDetails(): InboxWebSocketConnectionDetails {
+    return this.#http.inboxWebSocketConnectionDetails(this.#scopeQuery());
   }
 
   async reply(

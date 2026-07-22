@@ -1,3 +1,149 @@
+type InboxSource = "ig_comment" | "ig_dm" | "threads_reply" | "fb_comment" | "fb_dm" | "x_reply" | "x_dm";
+type InboxThreadStatus = "open" | "assigned" | "resolved";
+interface InboxItem {
+    id: string;
+    social_account_id: string;
+    workspace_id: string;
+    source: InboxSource;
+    external_id: string;
+    thread_key: string;
+    thread_status: InboxThreadStatus;
+    is_read: boolean;
+    is_own: boolean;
+    received_at: string;
+    created_at: string;
+    parent_external_id?: string;
+    assigned_to?: string;
+    linked_post_id?: string;
+    author_name?: string;
+    author_id?: string;
+    author_avatar_url?: string;
+    body?: string;
+    account_name?: string;
+    account_platform?: string;
+    account_avatar_url?: string;
+    x_credits_counted?: number;
+    x_credit_operation?: string;
+    x_credit_catalog_version?: string;
+    x_credit_billing_mode?: string;
+    url?: string;
+}
+interface InboxListParams {
+    source?: InboxSource;
+    isRead?: boolean;
+    isOwn?: boolean;
+    limit?: number;
+}
+interface InboxListResponse {
+    data: InboxItem[];
+    requestId?: string;
+}
+interface InboxReplyRequest {
+    text: string;
+}
+interface InboxReplyOptions {
+    idempotencyKey?: string;
+}
+type InboxReplyResult = {
+    state: "completed";
+    item: InboxItem;
+    operationId?: string;
+} | {
+    state: "reconciling";
+    operationId: string;
+    code: "X_REMOTE_ACCEPTED_RECONCILING";
+    message: string;
+    requestId?: string;
+};
+interface InboxUnreadCountResult {
+    count: number;
+}
+interface InboxMarkAllReadResult {
+    marked: number;
+}
+interface InboxThreadStateRequest {
+    threadStatus: InboxThreadStatus;
+    assignedTo?: string;
+}
+interface InboxMediaContext {
+    id: string;
+    caption: string;
+    media_url: string;
+    timestamp: string;
+    media_type: string;
+    permalink: string;
+}
+interface XInboxBackfillRequest {
+    accountId?: string;
+    lookbackDays?: number;
+    maxItems?: number;
+    includeReplies: boolean;
+    includeDms: boolean;
+    confirmationToken?: string;
+}
+interface InboxSyncRequest {
+    xBackfill?: XInboxBackfillRequest;
+}
+interface InboxSyncError {
+    account_id: string;
+    platform: string;
+    step: string;
+    error: string;
+}
+interface InboxSyncAccountDetail {
+    account_id: string;
+    platform: string;
+    account_name: string;
+    media_found: number;
+    comments_found: number;
+}
+interface InboxSyncResult {
+    new_items: number;
+    accounts_checked: number;
+    errors: InboxSyncError[];
+    details: InboxSyncAccountDetail[];
+}
+interface XInboxBackfillAccountResult {
+    account_id: string;
+    accepted: number;
+    suppressed: number;
+    duplicates: number;
+    read: number;
+    stopped_at_boundary?: boolean;
+    stop_reason?: string;
+    missing_scopes?: string[];
+}
+interface XInboxBackfillResult {
+    estimated_x_credits?: number;
+    confirmation_required?: boolean;
+    confirmation_operation_id?: string;
+    confirmation_token?: string;
+    confirmation_expires_at?: string;
+    execution_lease_expires_at?: string;
+    status?: "in_progress";
+    accounts_checked?: number;
+    accepted?: number;
+    suppressed?: number;
+    duplicates?: number;
+    read?: number;
+    details?: XInboxBackfillAccountResult[];
+}
+interface XInboxOutboundStatus {
+    id: string;
+    status: string;
+    completion_attempts: number;
+    reconciliation_deadline?: string;
+    reconciliation_required: boolean;
+    response_inbox_item_id?: string;
+    updated_at: string;
+}
+interface InboxWebSocketConnectionDetails {
+    readonly url: string;
+    readonly headers: Readonly<{
+        Authorization: string;
+    }>;
+}
+
 interface HttpClientOptions {
     apiKey: string;
     baseUrl: string;
@@ -36,6 +182,7 @@ declare class HttpClient {
         headers?: Record<string, string>;
         signal?: AbortSignal;
     }): AsyncGenerator<SSEEvent<T>>;
+    inboxWebSocketConnectionDetails(query: Record<string, string | number | boolean | undefined | null>): InboxWebSocketConnectionDetails;
     get<T>(path: string, query?: Record<string, string | number | boolean | undefined | null>): Promise<T>;
     getText(path: string, query?: Record<string, string | number | boolean | undefined | null>): Promise<string>;
     post<T>(path: string, body?: unknown, headers?: Record<string, string>): Promise<T>;
@@ -278,64 +425,6 @@ interface UpdateWebhookParams {
     events?: string[];
     active?: boolean;
 }
-
-type InboxSource = "ig_comment" | "ig_dm" | "threads_reply" | "fb_comment" | "fb_dm" | "x_reply" | "x_dm";
-type InboxThreadStatus = "open" | "assigned" | "resolved";
-interface InboxItem {
-    id: string;
-    social_account_id: string;
-    workspace_id: string;
-    source: InboxSource;
-    external_id: string;
-    thread_key: string;
-    thread_status: InboxThreadStatus;
-    is_read: boolean;
-    is_own: boolean;
-    received_at: string;
-    created_at: string;
-    parent_external_id?: string;
-    assigned_to?: string;
-    linked_post_id?: string;
-    author_name?: string;
-    author_id?: string;
-    author_avatar_url?: string;
-    body?: string;
-    account_name?: string;
-    account_platform?: string;
-    account_avatar_url?: string;
-    x_credits_counted?: number;
-    x_credit_operation?: string;
-    x_credit_catalog_version?: string;
-    x_credit_billing_mode?: string;
-    url?: string;
-}
-interface InboxListParams {
-    source?: InboxSource;
-    isRead?: boolean;
-    isOwn?: boolean;
-    limit?: number;
-}
-interface InboxListResponse {
-    data: InboxItem[];
-    requestId?: string;
-}
-interface InboxReplyRequest {
-    text: string;
-}
-interface InboxReplyOptions {
-    idempotencyKey?: string;
-}
-type InboxReplyResult = {
-    state: "completed";
-    item: InboxItem;
-    operationId?: string;
-} | {
-    state: "reconciling";
-    operationId: string;
-    code: "X_REMOTE_ACCEPTED_RECONCILING";
-    message: string;
-    requestId?: string;
-};
 
 interface Workspace {
     id: string;
@@ -961,6 +1050,15 @@ declare class ScopedInbox {
     #private;
     constructor(http: HttpClient, scope: InboxScope);
     list(params?: InboxListParams): Promise<InboxListResponse>;
+    unreadCount(): Promise<InboxUnreadCountResult>;
+    get(id: string): Promise<InboxItem>;
+    markRead(id: string): Promise<void>;
+    markAllRead(): Promise<InboxMarkAllReadResult>;
+    updateThreadState(id: string, request: InboxThreadStateRequest): Promise<InboxItem>;
+    mediaContext(id: string): Promise<InboxMediaContext>;
+    sync(request?: InboxSyncRequest): Promise<InboxSyncResult | XInboxBackfillResult>;
+    xOutboundStatus(requestId: string): Promise<XInboxOutboundStatus>;
+    webSocketConnectionDetails(): InboxWebSocketConnectionDetails;
     reply(id: string, request: InboxReplyRequest, options?: InboxReplyOptions): Promise<InboxReplyResult>;
 }
 declare class Inbox {
@@ -1062,4 +1160,4 @@ declare class QuotaError extends UniPostError {
  */
 declare function verifyWebhookSignature(options: VerifyWebhookOptions): Promise<boolean>;
 
-export { type AccountHealth, type AccountStatus, type AnalyticsQueryParams, type AnalyticsRollup, type AnalyticsRollupParams, type ApiKey, type ApiKeyEnvironment, type AudioOverlayCreateParams, type AudioOverlayError, type AudioOverlayFit, type AudioOverlayJob, type AudioOverlayMode, type AudioOverlayRequestOptions, type AudioOverlayStatus, AuthError, type BulkPostError, type BulkPostResult, type ConnectAccountParams, type ConnectSession, type ConnectionType, type CreateApiKeyParams, type CreateConnectSessionParams, type CreatePlatformCredentialParams, type CreatePostParams, type CreatePostPlatformPost, type CreateProfileParams, type CreateWebhookParams, type CreatedApiKey, type DeliveryJob, type ErrorContract, type ErrorSource, type ErrorTemporality, type GetConnectUrlParams, type Granularity, type GroupBy, type InboxItem, type InboxListParams, type InboxListResponse, type InboxReplyOptions, type InboxReplyRequest, type InboxReplyResult, type InboxSource, type InboxThreadStatus, type ListAccountsParams, type ListDeliveryJobsParams, type ListLogsParams, type ListPostsParams, type LogCategory, type LogEntry, type LogLevel, type LogSource, type LogStatus, type LogStreamOptions, type LogStreamParams, type ManagedUser, type MediaUploadRequest, type MediaUploadResponse, NotFoundError, type OAuthConnectResponse, type PaginatedResponse, type Plan, type Platform, type PlatformCredential, PlatformError, type PlatformResult, type Post, type PostAnalyticsItem, type PostPreviewLink, type PostQueueSnapshot, type PostStatus, type Profile, type ProviderError, QuotaError, RateLimitError, type RetryPolicy, type RetryState, type SocialAccount, UniPost, type UniPostClientOptions, UniPostError, type UpdatePostParams, type UpdateProfileParams, type UpdateWebhookParams, type UpdateWorkspaceParams, type Usage, ValidationError, type ValidationIssue, type ValidationResult, type VerifyWebhookOptions, type WebhookEvent, type WebhookEventType, type WebhookSubscription, type WebhookSubscriptionSecret, type Workspace, verifyWebhookSignature };
+export { type AccountHealth, type AccountStatus, type AnalyticsQueryParams, type AnalyticsRollup, type AnalyticsRollupParams, type ApiKey, type ApiKeyEnvironment, type AudioOverlayCreateParams, type AudioOverlayError, type AudioOverlayFit, type AudioOverlayJob, type AudioOverlayMode, type AudioOverlayRequestOptions, type AudioOverlayStatus, AuthError, type BulkPostError, type BulkPostResult, type ConnectAccountParams, type ConnectSession, type ConnectionType, type CreateApiKeyParams, type CreateConnectSessionParams, type CreatePlatformCredentialParams, type CreatePostParams, type CreatePostPlatformPost, type CreateProfileParams, type CreateWebhookParams, type CreatedApiKey, type DeliveryJob, type ErrorContract, type ErrorSource, type ErrorTemporality, type GetConnectUrlParams, type Granularity, type GroupBy, type InboxItem, type InboxListParams, type InboxListResponse, type InboxMarkAllReadResult, type InboxMediaContext, type InboxReplyOptions, type InboxReplyRequest, type InboxReplyResult, type InboxSource, type InboxSyncAccountDetail, type InboxSyncError, type InboxSyncRequest, type InboxSyncResult, type InboxThreadStateRequest, type InboxThreadStatus, type InboxUnreadCountResult, type InboxWebSocketConnectionDetails, type ListAccountsParams, type ListDeliveryJobsParams, type ListLogsParams, type ListPostsParams, type LogCategory, type LogEntry, type LogLevel, type LogSource, type LogStatus, type LogStreamOptions, type LogStreamParams, type ManagedUser, type MediaUploadRequest, type MediaUploadResponse, NotFoundError, type OAuthConnectResponse, type PaginatedResponse, type Plan, type Platform, type PlatformCredential, PlatformError, type PlatformResult, type Post, type PostAnalyticsItem, type PostPreviewLink, type PostQueueSnapshot, type PostStatus, type Profile, type ProviderError, QuotaError, RateLimitError, type RetryPolicy, type RetryState, type SocialAccount, UniPost, type UniPostClientOptions, UniPostError, type UpdatePostParams, type UpdateProfileParams, type UpdateWebhookParams, type UpdateWorkspaceParams, type Usage, ValidationError, type ValidationIssue, type ValidationResult, type VerifyWebhookOptions, type WebhookEvent, type WebhookEventType, type WebhookSubscription, type WebhookSubscriptionSecret, type Workspace, type XInboxBackfillAccountResult, type XInboxBackfillRequest, type XInboxBackfillResult, type XInboxOutboundStatus, verifyWebhookSignature };

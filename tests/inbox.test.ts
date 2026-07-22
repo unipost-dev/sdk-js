@@ -1,12 +1,24 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { UniPost, UniPostError } from "../src/index.js";
+import { RateLimitError, UniPost, UniPostError } from "../src/index.js";
 import type {
   InboxItem,
   InboxListParams,
   InboxListResponse,
+  InboxMarkAllReadResult,
+  InboxMediaContext,
   InboxReplyOptions,
   InboxReplyRequest,
   InboxReplyResult,
+  InboxSyncRequest,
+  InboxSyncResult,
+  InboxThreadStateRequest,
+  InboxThreadStatus,
+  InboxUnreadCountResult,
+  InboxWebSocketConnectionDetails,
+  XInboxBackfillAccountResult,
+  XInboxBackfillRequest,
+  XInboxBackfillResult,
+  XInboxOutboundStatus,
 } from "../src/index.js";
 
 const mockFetch = vi.fn();
@@ -45,6 +57,85 @@ type ExpectedInboxReplyResult =
       message: string;
       requestId?: string;
     };
+type ExpectedInboxThreadStatus = "open" | "assigned" | "resolved";
+type ExpectedInboxUnreadCountResult = { count: number };
+type ExpectedInboxMarkAllReadResult = { marked: number };
+type ExpectedInboxThreadStateRequest = {
+  threadStatus: InboxThreadStatus;
+  assignedTo?: string;
+};
+type ExpectedInboxMediaContext = {
+  id: string;
+  caption: string;
+  media_url: string;
+  timestamp: string;
+  media_type: string;
+  permalink: string;
+};
+type ExpectedXInboxBackfillRequest = {
+  accountId?: string;
+  lookbackDays?: number;
+  maxItems?: number;
+  includeReplies: boolean;
+  includeDms: boolean;
+  confirmationToken?: string;
+};
+type ExpectedInboxSyncRequest = { xBackfill?: XInboxBackfillRequest };
+type ExpectedInboxSyncResult = {
+  new_items: number;
+  accounts_checked: number;
+  errors: Array<{
+    account_id: string;
+    platform: string;
+    step: string;
+    error: string;
+  }>;
+  details: Array<{
+    account_id: string;
+    platform: string;
+    account_name: string;
+    media_found: number;
+    comments_found: number;
+  }>;
+};
+type ExpectedXInboxBackfillAccountResult = {
+  account_id: string;
+  accepted: number;
+  suppressed: number;
+  duplicates: number;
+  read: number;
+  stopped_at_boundary?: boolean;
+  stop_reason?: string;
+  missing_scopes?: string[];
+};
+type ExpectedXInboxBackfillResult = {
+  estimated_x_credits?: number;
+  confirmation_required?: boolean;
+  confirmation_operation_id?: string;
+  confirmation_token?: string;
+  confirmation_expires_at?: string;
+  execution_lease_expires_at?: string;
+  status?: "in_progress";
+  accounts_checked?: number;
+  accepted?: number;
+  suppressed?: number;
+  duplicates?: number;
+  read?: number;
+  details?: XInboxBackfillAccountResult[];
+};
+type ExpectedXInboxOutboundStatus = {
+  id: string;
+  status: string;
+  completion_attempts: number;
+  reconciliation_deadline?: string;
+  reconciliation_required: boolean;
+  response_inbox_item_id?: string;
+  updated_at: string;
+};
+type ExpectedInboxWebSocketConnectionDetails = {
+  readonly url: string;
+  readonly headers: Readonly<{ Authorization: string }>;
+};
 type IsAny<Value> = 0 extends (1 & Value) ? true : false;
 type Equal<Left, Right> =
   IsAny<Left> extends true
@@ -65,6 +156,34 @@ type InboxListResponseIsExact = Assert<Equal<InboxListResponse, ExpectedInboxLis
 type InboxReplyRequestIsExact = Assert<Equal<InboxReplyRequest, ExpectedInboxReplyRequest>>;
 type InboxReplyOptionsIsExact = Assert<Equal<InboxReplyOptions, ExpectedInboxReplyOptions>>;
 type InboxReplyResultIsExact = Assert<Equal<InboxReplyResult, ExpectedInboxReplyResult>>;
+type InboxThreadStatusIsExact = Assert<Equal<InboxThreadStatus, ExpectedInboxThreadStatus>>;
+type InboxUnreadCountResultIsExact = Assert<
+  Equal<InboxUnreadCountResult, ExpectedInboxUnreadCountResult>
+>;
+type InboxMarkAllReadResultIsExact = Assert<
+  Equal<InboxMarkAllReadResult, ExpectedInboxMarkAllReadResult>
+>;
+type InboxThreadStateRequestIsExact = Assert<
+  Equal<InboxThreadStateRequest, ExpectedInboxThreadStateRequest>
+>;
+type InboxMediaContextIsExact = Assert<Equal<InboxMediaContext, ExpectedInboxMediaContext>>;
+type XInboxBackfillRequestIsExact = Assert<
+  Equal<XInboxBackfillRequest, ExpectedXInboxBackfillRequest>
+>;
+type InboxSyncRequestIsExact = Assert<Equal<InboxSyncRequest, ExpectedInboxSyncRequest>>;
+type InboxSyncResultIsExact = Assert<Equal<InboxSyncResult, ExpectedInboxSyncResult>>;
+type XInboxBackfillAccountResultIsExact = Assert<
+  Equal<XInboxBackfillAccountResult, ExpectedXInboxBackfillAccountResult>
+>;
+type XInboxBackfillResultIsExact = Assert<
+  Equal<XInboxBackfillResult, ExpectedXInboxBackfillResult>
+>;
+type XInboxOutboundStatusIsExact = Assert<
+  Equal<XInboxOutboundStatus, ExpectedXInboxOutboundStatus>
+>;
+type InboxWebSocketConnectionDetailsIsExact = Assert<
+  Equal<InboxWebSocketConnectionDetails, ExpectedInboxWebSocketConnectionDetails>
+>;
 type ScopedInboxListResult = Awaited<
   ReturnType<ReturnType<UniPost["inbox"]["workspace"]>["list"]>
 >;
@@ -140,6 +259,107 @@ type WorkspaceScopedInboxReplyResultIsNotAny = Assert<
   Equal<IsAny<WorkspaceScopedInboxReplyResult>, false>
 >;
 type InboxListParamsContract = Pick<InboxListParams, keyof ExpectedInboxListParams>;
+type ScopedInbox = ReturnType<UniPost["inbox"]["workspace"]>;
+
+type ScopedInboxUnreadCountParametersAreExact = Assert<
+  Equal<Parameters<ScopedInbox["unreadCount"]>, []>
+>;
+type ScopedInboxUnreadCountResult = Awaited<ReturnType<ScopedInbox["unreadCount"]>>;
+type ScopedInboxUnreadCountResultIsExact = Assert<
+  Equal<ScopedInboxUnreadCountResult, InboxUnreadCountResult>
+>;
+type ScopedInboxUnreadCountResultIsNotAny = Assert<
+  Equal<IsAny<ScopedInboxUnreadCountResult>, false>
+>;
+type ScopedInboxGetParametersAreExact = Assert<
+  Equal<Parameters<ScopedInbox["get"]>, [id: string]>
+>;
+type ScopedInboxGetResult = Awaited<ReturnType<ScopedInbox["get"]>>;
+type ScopedInboxGetResultIsExact = Assert<Equal<ScopedInboxGetResult, InboxItem>>;
+type ScopedInboxGetResultIsNotAny = Assert<Equal<IsAny<ScopedInboxGetResult>, false>>;
+type ScopedInboxMarkReadParametersAreExact = Assert<
+  Equal<Parameters<ScopedInbox["markRead"]>, [id: string]>
+>;
+type ScopedInboxMarkReadResult = Awaited<ReturnType<ScopedInbox["markRead"]>>;
+type ScopedInboxMarkReadResultIsExact = Assert<Equal<ScopedInboxMarkReadResult, void>>;
+type ScopedInboxMarkReadResultIsNotAny = Assert<
+  Equal<IsAny<ScopedInboxMarkReadResult>, false>
+>;
+type ScopedInboxMarkAllReadParametersAreExact = Assert<
+  Equal<Parameters<ScopedInbox["markAllRead"]>, []>
+>;
+type ScopedInboxMarkAllReadResult = Awaited<ReturnType<ScopedInbox["markAllRead"]>>;
+type ScopedInboxMarkAllReadResultIsExact = Assert<
+  Equal<ScopedInboxMarkAllReadResult, InboxMarkAllReadResult>
+>;
+type ScopedInboxMarkAllReadResultIsNotAny = Assert<
+  Equal<IsAny<ScopedInboxMarkAllReadResult>, false>
+>;
+type ScopedInboxUpdateThreadStateParametersAreExact = Assert<
+  Equal<
+    Parameters<ScopedInbox["updateThreadState"]>,
+    [id: string, request: InboxThreadStateRequest]
+  >
+>;
+type ScopedInboxUpdateThreadStateRequest = Parameters<
+  ScopedInbox["updateThreadState"]
+>[1];
+type ScopedInboxUpdateThreadStateRequestIsNotAny = Assert<
+  Equal<IsAny<ScopedInboxUpdateThreadStateRequest>, false>
+>;
+type ScopedInboxUpdateThreadStateResult = Awaited<
+  ReturnType<ScopedInbox["updateThreadState"]>
+>;
+type ScopedInboxUpdateThreadStateResultIsExact = Assert<
+  Equal<ScopedInboxUpdateThreadStateResult, InboxItem>
+>;
+type ScopedInboxUpdateThreadStateResultIsNotAny = Assert<
+  Equal<IsAny<ScopedInboxUpdateThreadStateResult>, false>
+>;
+type ScopedInboxMediaContextParametersAreExact = Assert<
+  Equal<Parameters<ScopedInbox["mediaContext"]>, [id: string]>
+>;
+type ScopedInboxMediaContextResult = Awaited<ReturnType<ScopedInbox["mediaContext"]>>;
+type ScopedInboxMediaContextResultIsExact = Assert<
+  Equal<ScopedInboxMediaContextResult, InboxMediaContext>
+>;
+type ScopedInboxMediaContextResultIsNotAny = Assert<
+  Equal<IsAny<ScopedInboxMediaContextResult>, false>
+>;
+type ScopedInboxSyncParametersAreExact = Assert<
+  Equal<Parameters<ScopedInbox["sync"]>, [request?: InboxSyncRequest]>
+>;
+type ScopedInboxSyncRequest = Parameters<ScopedInbox["sync"]>[0];
+type ScopedInboxSyncRequestIsNotAny = Assert<Equal<IsAny<ScopedInboxSyncRequest>, false>>;
+type ScopedInboxSyncResult = Awaited<ReturnType<ScopedInbox["sync"]>>;
+type ScopedInboxSyncResultIsExact = Assert<
+  Equal<ScopedInboxSyncResult, InboxSyncResult | XInboxBackfillResult>
+>;
+type ScopedInboxSyncResultIsNotAny = Assert<Equal<IsAny<ScopedInboxSyncResult>, false>>;
+type ScopedInboxXOutboundStatusParametersAreExact = Assert<
+  Equal<Parameters<ScopedInbox["xOutboundStatus"]>, [requestId: string]>
+>;
+type ScopedInboxXOutboundStatusResult = Awaited<
+  ReturnType<ScopedInbox["xOutboundStatus"]>
+>;
+type ScopedInboxXOutboundStatusResultIsExact = Assert<
+  Equal<ScopedInboxXOutboundStatusResult, XInboxOutboundStatus>
+>;
+type ScopedInboxXOutboundStatusResultIsNotAny = Assert<
+  Equal<IsAny<ScopedInboxXOutboundStatusResult>, false>
+>;
+type ScopedInboxWebSocketConnectionDetailsParametersAreExact = Assert<
+  Equal<Parameters<ScopedInbox["webSocketConnectionDetails"]>, []>
+>;
+type ScopedInboxWebSocketConnectionDetailsResult = ReturnType<
+  ScopedInbox["webSocketConnectionDetails"]
+>;
+type ScopedInboxWebSocketConnectionDetailsResultIsExact = Assert<
+  Equal<ScopedInboxWebSocketConnectionDetailsResult, InboxWebSocketConnectionDetails>
+>;
+type ScopedInboxWebSocketConnectionDetailsResultIsNotAny = Assert<
+  Equal<IsAny<ScopedInboxWebSocketConnectionDetailsResult>, false>
+>;
 
 const item = {
   id: "inbox_1",
@@ -153,6 +373,63 @@ const item = {
   is_own: false,
   received_at: "2026-07-22T00:00:00Z",
   created_at: "2026-07-22T00:00:00Z",
+};
+
+const mediaContext: InboxMediaContext = {
+  id: "media_1",
+  caption: "Launch post",
+  media_url: "https://cdn.example.test/media_1.jpg",
+  timestamp: "2026-07-21T23:00:00Z",
+  media_type: "IMAGE",
+  permalink: "https://social.example.test/posts/media_1",
+};
+
+const syncResult: InboxSyncResult = {
+  new_items: 3,
+  accounts_checked: 1,
+  errors: [],
+  details: [
+    {
+      account_id: "sa_1",
+      platform: "instagram",
+      account_name: "UniPost",
+      media_found: 2,
+      comments_found: 3,
+    },
+  ],
+};
+
+const xBackfillResult: XInboxBackfillResult = {
+  status: "in_progress",
+  estimated_x_credits: 42,
+  confirmation_required: false,
+  accounts_checked: 1,
+  accepted: 7,
+  suppressed: 2,
+  duplicates: 1,
+  read: 10,
+  details: [
+    {
+      account_id: "sa_x_1",
+      accepted: 7,
+      suppressed: 2,
+      duplicates: 1,
+      read: 10,
+      stopped_at_boundary: true,
+      stop_reason: "lookback_boundary",
+      missing_scopes: ["dm.read"],
+    },
+  ],
+};
+
+const xOutboundStatus: XInboxOutboundStatus = {
+  id: "request_1",
+  status: "completed",
+  completion_attempts: 2,
+  reconciliation_deadline: "2026-07-22T01:00:00Z",
+  reconciliation_required: false,
+  response_inbox_item_id: "inbox_response_1",
+  updated_at: "2026-07-22T00:30:00Z",
 };
 
 function jsonResponse(
@@ -544,5 +821,281 @@ describe("Inbox", () => {
       client.inbox.workspace().reply("inbox_1", { text: "Reply" }),
     ).rejects.toBeInstanceOf(UniPostError);
     expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    {
+      name: "gets the managed-user unread count",
+      scope: "managed_user" as const,
+      responseBody: { data: { count: 6 } },
+      status: 200,
+      invoke: (scoped: ScopedInbox) => scoped.unreadCount(),
+      expectedMethod: "GET",
+      expectedPath: "/v1/inbox/unread-count",
+      expectedBody: undefined,
+      expectedResult: { count: 6 },
+    },
+    {
+      name: "gets a workspace item with an encoded id",
+      scope: "workspace" as const,
+      responseBody: { data: item },
+      status: 200,
+      invoke: (scoped: ScopedInbox) => scoped.get("item /?#"),
+      expectedMethod: "GET",
+      expectedPath: "/v1/inbox/item%20%2F%3F%23",
+      expectedBody: undefined,
+      expectedResult: item,
+    },
+    {
+      name: "marks a managed-user item read with an encoded id",
+      scope: "managed_user" as const,
+      responseBody: undefined,
+      status: 204,
+      invoke: (scoped: ScopedInbox) => scoped.markRead("item /?#"),
+      expectedMethod: "POST",
+      expectedPath: "/v1/inbox/item%20%2F%3F%23/read",
+      expectedBody: undefined,
+      expectedResult: undefined,
+    },
+    {
+      name: "marks all workspace items read",
+      scope: "workspace" as const,
+      responseBody: { data: { marked: 4 } },
+      status: 200,
+      invoke: (scoped: ScopedInbox) => scoped.markAllRead(),
+      expectedMethod: "POST",
+      expectedPath: "/v1/inbox/mark-all-read",
+      expectedBody: undefined,
+      expectedResult: { marked: 4 },
+    },
+    {
+      name: "updates managed-user thread state with an encoded id",
+      scope: "managed_user" as const,
+      responseBody: { data: { ...item, thread_status: "assigned", assigned_to: "agent_1" } },
+      status: 200,
+      invoke: (scoped: ScopedInbox) =>
+        scoped.updateThreadState("item /?#", {
+          threadStatus: "assigned",
+          assignedTo: "agent_1",
+        }),
+      expectedMethod: "POST",
+      expectedPath: "/v1/inbox/item%20%2F%3F%23/thread-state",
+      expectedBody: { thread_status: "assigned", assigned_to: "agent_1" },
+      expectedResult: { ...item, thread_status: "assigned", assigned_to: "agent_1" },
+    },
+    {
+      name: "gets workspace media context with an encoded id",
+      scope: "workspace" as const,
+      responseBody: { data: mediaContext },
+      status: 200,
+      invoke: (scoped: ScopedInbox) => scoped.mediaContext("item /?#"),
+      expectedMethod: "GET",
+      expectedPath: "/v1/inbox/item%20%2F%3F%23/media-context",
+      expectedBody: undefined,
+      expectedResult: mediaContext,
+    },
+    {
+      name: "syncs the ordinary managed-user Inbox without a body",
+      scope: "managed_user" as const,
+      responseBody: { data: syncResult },
+      status: 200,
+      invoke: (scoped: ScopedInbox) => scoped.sync(),
+      expectedMethod: "POST",
+      expectedPath: "/v1/inbox/sync",
+      expectedBody: undefined,
+      expectedResult: syncResult,
+    },
+    {
+      name: "maps every X backfill field and explicit false values for workspace sync",
+      scope: "workspace" as const,
+      responseBody: { data: xBackfillResult },
+      status: 200,
+      invoke: (scoped: ScopedInbox) =>
+        scoped.sync({
+          xBackfill: {
+            accountId: "sa_x_1",
+            lookbackDays: 14,
+            maxItems: 250,
+            includeReplies: false,
+            includeDms: false,
+            confirmationToken: "confirm-exact-token",
+          },
+        }),
+      expectedMethod: "POST",
+      expectedPath: "/v1/inbox/sync",
+      expectedBody: {
+        x_backfill: {
+          account_id: "sa_x_1",
+          lookback_days: 14,
+          max_items: 250,
+          include_replies: false,
+          include_dms: false,
+          confirmation_token: "confirm-exact-token",
+        },
+      },
+      expectedResult: xBackfillResult,
+    },
+    {
+      name: "gets managed-user X outbound status with an encoded request id",
+      scope: "managed_user" as const,
+      responseBody: { data: xOutboundStatus },
+      status: 200,
+      invoke: (scoped: ScopedInbox) => scoped.xOutboundStatus("request /?#"),
+      expectedMethod: "GET",
+      expectedPath: "/v1/inbox/x-outbound-operations/request%20%2F%3F%23",
+      expectedBody: undefined,
+      expectedResult: xOutboundStatus,
+    },
+  ])(
+    "$name with the exact method, scope query, body, and unwrapped response",
+    async ({
+      scope,
+      responseBody,
+      status,
+      invoke,
+      expectedMethod,
+      expectedPath,
+      expectedBody,
+      expectedResult,
+    }) => {
+      mockFetch.mockResolvedValueOnce(jsonResponse(responseBody, status));
+      const scoped = scope === "managed_user"
+        ? client.inbox.managedUser("user A")
+        : client.inbox.workspace();
+
+      const result = await invoke(scoped);
+
+      expect(result).toEqual(expectedResult);
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+      expect(init.method).toBe(expectedMethod);
+      if (expectedBody === undefined) {
+        expect(init.body).toBeUndefined();
+      } else {
+        expect(JSON.parse(init.body as string)).toEqual(expectedBody);
+      }
+
+      const url = requestedUrl();
+      expect(url.pathname).toBe(expectedPath);
+      expect(sortedQueryEntries(url)).toEqual(
+        scope === "managed_user"
+          ? [
+              ["external_user_id", "user A"],
+              ["inbox_scope", "managed_user"],
+            ]
+          : [["inbox_scope", "workspace"]],
+      );
+    },
+  );
+
+  it("omits assigned_to when updating thread state without an assignee", async () => {
+    mockFetch.mockResolvedValueOnce(
+      jsonResponse({ data: { ...item, thread_status: "resolved" } }),
+    );
+
+    await client.inbox.workspace().updateThreadState("inbox_1", {
+      threadStatus: "resolved",
+    });
+
+    const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(init.body as string)).toEqual({ thread_status: "resolved" });
+    expect(JSON.parse(init.body as string)).not.toHaveProperty("assigned_to");
+  });
+
+  it("accepts only the documented thread status union at typecheck time", () => {
+    const checkThreadState = (_request: InboxThreadStateRequest) => undefined;
+
+    checkThreadState({ threadStatus: "open" });
+    checkThreadState({ threadStatus: "assigned", assignedTo: "agent_1" });
+    checkThreadState({ threadStatus: "resolved" });
+    // @ts-expect-error pending is not a supported Inbox thread status.
+    checkThreadState({ threadStatus: "pending" });
+  });
+
+  it("does not automatically replay any rate-limited shared Inbox POST", async () => {
+    mockFetch.mockResolvedValueOnce(
+      jsonResponse(
+        { error: { code: "RATE_LIMITED", message: "Try later", retry_after: 0 } },
+        429,
+        { "Retry-After": "0" },
+      ),
+    );
+
+    await expect(client.inbox.workspace().markAllRead()).rejects.toBeInstanceOf(
+      RateLimitError,
+    );
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    {
+      baseUrl: "https://example.test/base/",
+      scope: "managed_user" as const,
+      expectedUrl:
+        "wss://example.test/v1/inbox/ws?inbox_scope=managed_user&external_user_id=user+A",
+    },
+    {
+      baseUrl: "http://localhost:8787/base/",
+      scope: "workspace" as const,
+      expectedUrl: "ws://localhost:8787/v1/inbox/ws?inbox_scope=workspace",
+    },
+  ])(
+    "derives $expectedUrl without making a request",
+    ({ baseUrl, scope, expectedUrl }) => {
+      const websocketClient = new UniPost({ apiKey: "ws_key", baseUrl });
+      const scoped = scope === "managed_user"
+        ? websocketClient.inbox.managedUser("user A")
+        : websocketClient.inbox.workspace();
+
+      const details = scoped.webSocketConnectionDetails();
+
+      expect(details.url).toBe(expectedUrl);
+      expect(details.headers).toEqual({ Authorization: "Bearer ws_key" });
+      expect(mockFetch).not.toHaveBeenCalled();
+    },
+  );
+
+  it("keeps WebSocket scope and credentials private, deeply frozen, and fresh", () => {
+    const apiKey = "private/key?not-in-url";
+    const websocketClient = new UniPost({
+      apiKey,
+      baseUrl: "https://example.test",
+    });
+    const scoped = websocketClient.inbox.managedUser("bound user");
+    expect(Reflect.set(scoped as object, "scope", { kind: "workspace" })).toBe(true);
+
+    const details = scoped.webSocketConnectionDetails();
+
+    expect(details.url).toBe(
+      "wss://example.test/v1/inbox/ws?inbox_scope=managed_user&external_user_id=bound+user",
+    );
+    expect(details.url).not.toContain(apiKey);
+    expect(details.url).not.toContain(encodeURIComponent(apiKey));
+    expect(Object.keys(details.headers)).toEqual(["Authorization"]);
+    expect(details.headers.Authorization).toBe(`Bearer ${apiKey}`);
+    expect(Object.isFrozen(details)).toBe(true);
+    expect(Object.isFrozen(details.headers)).toBe(true);
+    expect(Reflect.set(details as object, "url", "ws://attacker.test")).toBe(false);
+    expect(
+      Reflect.set(details.headers as object, "Authorization", "Bearer attacker"),
+    ).toBe(false);
+
+    const fresh = scoped.webSocketConnectionDetails();
+    expect(fresh).not.toBe(details);
+    expect(fresh.headers).not.toBe(details.headers);
+    expect(fresh).toEqual(details);
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it("rejects non-HTTP WebSocket base URL schemes without making a request", () => {
+    const websocketClient = new UniPost({
+      apiKey: "ws_key",
+      baseUrl: "ftp://example.test",
+    });
+
+    expect(() => websocketClient.inbox.workspace().webSocketConnectionDetails()).toThrow(
+      /WebSocket.*protocol/i,
+    );
+    expect(mockFetch).not.toHaveBeenCalled();
   });
 });

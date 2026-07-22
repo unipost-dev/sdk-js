@@ -67,3 +67,102 @@ export type InboxReplyResult =
       message: string;
       requestId?: string;
     };
+
+export interface InboxUnreadCountResult {
+  count: number;
+}
+
+export interface InboxMarkAllReadResult {
+  marked: number;
+}
+
+export interface InboxThreadStateRequest {
+  threadStatus: InboxThreadStatus;
+  assignedTo?: string;
+}
+
+export interface InboxMediaContext {
+  id: string;
+  caption: string;
+  media_url: string;
+  timestamp: string;
+  media_type: string;
+  permalink: string;
+}
+
+export interface XInboxBackfillRequest {
+  accountId?: string;
+  lookbackDays?: number;
+  maxItems?: number;
+  includeReplies: boolean;
+  includeDms: boolean;
+  confirmationToken?: string;
+}
+
+export interface InboxSyncRequest {
+  xBackfill?: XInboxBackfillRequest;
+}
+
+export interface InboxSyncError {
+  account_id: string;
+  platform: string;
+  step: string;
+  error: string;
+}
+
+export interface InboxSyncAccountDetail {
+  account_id: string;
+  platform: string;
+  account_name: string;
+  media_found: number;
+  comments_found: number;
+}
+
+export interface InboxSyncResult {
+  new_items: number;
+  accounts_checked: number;
+  errors: InboxSyncError[];
+  details: InboxSyncAccountDetail[];
+}
+
+export interface XInboxBackfillAccountResult {
+  account_id: string;
+  accepted: number;
+  suppressed: number;
+  duplicates: number;
+  read: number;
+  stopped_at_boundary?: boolean;
+  stop_reason?: string;
+  missing_scopes?: string[];
+}
+
+export interface XInboxBackfillResult {
+  estimated_x_credits?: number;
+  confirmation_required?: boolean;
+  confirmation_operation_id?: string;
+  confirmation_token?: string;
+  confirmation_expires_at?: string;
+  execution_lease_expires_at?: string;
+  status?: "in_progress";
+  accounts_checked?: number;
+  accepted?: number;
+  suppressed?: number;
+  duplicates?: number;
+  read?: number;
+  details?: XInboxBackfillAccountResult[];
+}
+
+export interface XInboxOutboundStatus {
+  id: string;
+  status: string;
+  completion_attempts: number;
+  reconciliation_deadline?: string;
+  reconciliation_required: boolean;
+  response_inbox_item_id?: string;
+  updated_at: string;
+}
+
+export interface InboxWebSocketConnectionDetails {
+  readonly url: string;
+  readonly headers: Readonly<{ Authorization: string }>;
+}

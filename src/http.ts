@@ -1,4 +1,5 @@
 import { parseApiError, RateLimitError } from "./errors.js";
+import type { InboxWebSocketConnectionDetails } from "./types/inbox.js";
 
 const MAX_RETRIES = 2;
 const SDK_VERSION = "0.5.0";
@@ -305,6 +306,28 @@ export class HttpClient {
       }
       reader.releaseLock();
     }
+  }
+
+  inboxWebSocketConnectionDetails(
+    query: Record<string, string | number | boolean | undefined | null>,
+  ): InboxWebSocketConnectionDetails {
+    const url = new URL("/v1/inbox/ws", this.baseUrl);
+    if (url.protocol === "https:") {
+      url.protocol = "wss:";
+    } else if (url.protocol === "http:") {
+      url.protocol = "ws:";
+    } else {
+      throw new Error("WebSocket connections require an HTTP or HTTPS base URL protocol.");
+    }
+
+    for (const [key, value] of Object.entries(query)) {
+      if (value !== undefined && value !== null && value !== "") {
+        url.searchParams.set(key, String(value));
+      }
+    }
+
+    const headers = Object.freeze({ Authorization: `Bearer ${this.apiKey}` });
+    return Object.freeze({ url: url.toString(), headers });
   }
 
   get<T>(path: string, query?: Record<string, string | number | boolean | undefined | null>) {
