@@ -1,19 +1,50 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { UniPost } from "../src/index.js";
-import type { InboxListParams } from "../src/index.js";
+import type { InboxItem, InboxListParams, InboxListResponse } from "../src/index.js";
 
 const mockFetch = vi.fn();
 vi.stubGlobal("fetch", mockFetch);
 
-type InboxListParamKey = "source" | "isRead" | "isOwn" | "limit";
+type ExpectedInboxSource =
+  | "ig_comment"
+  | "ig_dm"
+  | "threads_reply"
+  | "fb_comment"
+  | "fb_dm"
+  | "x_reply"
+  | "x_dm";
+type ExpectedInboxListParams = {
+  source?: ExpectedInboxSource;
+  isRead?: boolean;
+  isOwn?: boolean;
+  limit?: number;
+};
+type ExpectedInboxListResponse = {
+  data: InboxItem[];
+  requestId?: string;
+};
+type IsAny<Value> = 0 extends (1 & Value) ? true : false;
 type Equal<Left, Right> =
-  (<Value>() => Value extends Left ? 1 : 2) extends
-  (<Value>() => Value extends Right ? 1 : 2)
-    ? true
-    : false;
+  IsAny<Left> extends true
+    ? false
+    : IsAny<Right> extends true
+      ? false
+      : (<Value>() => Value extends Left ? 1 : 2) extends
+          (<Value>() => Value extends Right ? 1 : 2)
+        ? (<Value>() => Value extends Right ? 1 : 2) extends
+            (<Value>() => Value extends Left ? 1 : 2)
+          ? true
+          : false
+        : false;
 type Assert<Condition extends true> = Condition;
-type InboxListParamsHasExactKeys = Assert<Equal<keyof InboxListParams, InboxListParamKey>>;
-type InboxListParamsContract = Pick<InboxListParams, InboxListParamKey>;
+type InboxItemIsNotAny = Assert<Equal<IsAny<InboxItem>, false>>;
+type InboxListParamsIsExact = Assert<Equal<InboxListParams, ExpectedInboxListParams>>;
+type InboxListResponseIsExact = Assert<Equal<InboxListResponse, ExpectedInboxListResponse>>;
+type ScopedInboxListResult = Awaited<
+  ReturnType<ReturnType<UniPost["inbox"]["workspace"]>["list"]>
+>;
+type ScopedInboxListResultIsExact = Assert<Equal<ScopedInboxListResult, InboxListResponse>>;
+type InboxListParamsContract = Pick<InboxListParams, keyof ExpectedInboxListParams>;
 
 const item = {
   id: "inbox_1",
@@ -45,6 +76,13 @@ function requestedUrl(): URL {
   return new URL(requestUrl as string);
 }
 
+function sortedQueryEntries(url: URL): [string, string][] {
+  return [...url.searchParams.entries()].sort(
+    ([leftKey, leftValue], [rightKey, rightValue]) =>
+      leftKey.localeCompare(rightKey) || leftValue.localeCompare(rightValue),
+  );
+}
+
 describe("Inbox", () => {
   let client: UniPost;
 
@@ -73,9 +111,16 @@ describe("Inbox", () => {
 
     const url = requestedUrl();
     expect(url.pathname).toBe("/v1/inbox");
-    expect(url.search).toBe(
-      "?inbox_scope=managed_user&external_user_id=user+A&source=ig_comment&is_read=false&is_own=false&limit=50",
-    );
+    expect(sortedQueryEntries(url)).toEqual([
+      ["external_user_id", "user A"],
+      ["inbox_scope", "managed_user"],
+      ["is_own", "false"],
+      ["is_read", "false"],
+      ["limit", "50"],
+      ["source", "ig_comment"],
+    ]);
+    expect(url.search).toMatch(/[?&]external_user_id=user(?:\+|%20)A(?:&|$)/);
+    expect(url.search).not.toContain("external_user_id=user A");
     expect(url.searchParams.getAll("inbox_scope")).toEqual(["managed_user"]);
     expect(url.searchParams.getAll("external_user_id")).toEqual(["user A"]);
     expect(url.searchParams.getAll("source")).toEqual(["ig_comment"]);
@@ -95,7 +140,7 @@ describe("Inbox", () => {
 
     const url = requestedUrl();
     expect(url.pathname).toBe("/v1/inbox");
-    expect(url.search).toBe("?inbox_scope=workspace");
+    expect(sortedQueryEntries(url)).toEqual([["inbox_scope", "workspace"]]);
     expect(url.searchParams.getAll("inbox_scope")).toEqual(["workspace"]);
     expect(url.searchParams.has("external_user_id")).toBe(false);
   });
@@ -137,7 +182,17 @@ describe("Inbox", () => {
   });
 
   it("normalizes the non-paginated list response", async () => {
-    mockFetch.mockResolvedValueOnce(jsonResponse({ data: [item], request_id: "req_1" }));
+    mockFetch.mockResolvedValueOnce(
+      jsonResponse({
+        data: [item],
+        request_id: "req_1",
+        meta: { has_more: true },
+        cursor: "cursor_1",
+        offset: 25,
+        total: 100,
+        next_token: "next_1",
+      }),
+    );
 
     const result = await client.inbox.workspace().list();
 
@@ -148,5 +203,6 @@ describe("Inbox", () => {
     expect(result).not.toHaveProperty("cursor");
     expect(result).not.toHaveProperty("offset");
     expect(result).not.toHaveProperty("total");
+    expect(result).not.toHaveProperty("next_token");
   });
 });
