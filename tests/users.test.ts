@@ -71,6 +71,9 @@ describe("Managed Users", () => {
     expect(mockFetch.mock.calls[0][0]).toContain(
       "/v1/profiles/prof%2Fa%20b/users?limit=100",
     );
+    expect(mockFetch.mock.calls[0][1].headers["User-Agent"]).toBe(
+      "@unipost/sdk/0.7.0",
+    );
   });
 
   it("gets one managed user inside the selected profile", async () => {
