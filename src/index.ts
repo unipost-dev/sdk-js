@@ -77,6 +77,10 @@ export type {
   ConnectSession,
   CreateConnectSessionParams,
   GetConnectUrlParams,
+  ListManagedUsersParams,
+  GetManagedUserParams,
+  ManagedUserSummary,
+  ManagedUserDetail,
   ManagedUser,
   // Media
   MediaUploadRequest,

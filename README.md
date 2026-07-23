@@ -200,6 +200,22 @@ const session = await client.connect.createSession({
 // Send session.url to your user
 ```
 
+List and inspect managed users inside an explicit Profile. Profile scope is
+required so a workspace API key cannot silently fall back to a different
+Profile:
+
+```typescript
+const users = await client.users.list({
+  profileId: 'pr_brand_us',
+  limit: 100,
+})
+
+const user = await client.users.get({
+  profileId: 'pr_brand_us',
+  externalUserId: 'your_user_123',
+})
+```
+
 ### Get Connect URL (Your Own Accounts)
 
 ```typescript

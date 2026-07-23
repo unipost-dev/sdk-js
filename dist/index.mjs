@@ -104,7 +104,7 @@ function parseApiError(status, body, options = {}) {
 
 // src/http.ts
 var MAX_RETRIES = 2;
-var SDK_VERSION = "0.6.0";
+var SDK_VERSION = "0.7.0";
 var USER_AGENT = `@unipost/sdk/${SDK_VERSION}`;
 var HttpClient = class {
   apiKey;
@@ -990,14 +990,19 @@ var Users = class {
     this.http = http;
   }
   http;
-  /** List all managed users. */
-  async list() {
-    return this.http.get("/v1/users");
+  /** List managed users inside a profile. */
+  async list(params) {
+    const profileId = encodeURIComponent(params.profileId);
+    return this.http.get(`/v1/profiles/${profileId}/users`, {
+      limit: params.limit
+    });
   }
-  /** Get a single managed user by external_user_id. */
-  async get(externalUserId) {
+  /** Get one managed user inside a profile by external_user_id. */
+  async get(params) {
+    const profileId = encodeURIComponent(params.profileId);
+    const externalUserId = encodeURIComponent(params.externalUserId);
     const res = await this.http.get(
-      `/v1/users/${encodeURIComponent(externalUserId)}`
+      `/v1/profiles/${profileId}/users/${externalUserId}`
     );
     return res.data;
   }
