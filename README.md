@@ -3,14 +3,14 @@
 Official UniPost API client for JavaScript and TypeScript.
 Post to 7 social platforms with one API call.
 
-## Latest release: v0.5.0
+## Latest release: v0.6.0
 
-Media uploads now support custom audio overlay jobs and optional reserve-time file sizes.
+Scoped Inbox support is now available for server-side applications.
 
-- Use `client.media.audioOverlays.create(...)` to combine one uploaded video with one uploaded audio file.
-- Poll the job with `client.media.audioOverlays.get(...)`, then publish the returned `outputMediaId`.
-- Omit `sizeBytes` when reserving media if your app cannot know the raw file length up front.
-- Post failure responses also include the typed v0.4.1 error contract fields.
+- Bind every Inbox operation to either `client.inbox.managedUser(id)` or `client.inbox.workspace()`.
+- List, read, reply, thread state, media context, sync, X backfill, X reply reconciliation, and WebSocket connection details are fully typed.
+- X replies distinguish completed delivery from accepted-but-reconciling delivery.
+- WebSocket helpers return connection details without opening a connection or adding a production dependency.
 
 ## Installation
 
@@ -212,6 +212,121 @@ const { auth_url } = await client.connect.getConnectUrl({
 
 console.log(auth_url)
 ```
+
+### Inbox (server-side apps)
+
+Keep the workspace API key on your application backend. Never expose it to managed users or include it in browser bundles. For managed-user isolation, derive the external user ID from your authenticated application session, not from arbitrary caller-supplied scope fields, and bind it with `client.inbox.managedUser(id)`. Managed-user scope has no workspace fallback. Use `client.inbox.workspace()` only for creator-bound owner/admin aggregate workflows.
+
+The following is a complete, type-checked style of integration using the public SDK types:
+
+```typescript
+import { UniPost } from '@unipost/sdk'
+import type {
+  InboxReplyResult,
+  InboxSyncRequest,
+  InboxSyncResult,
+  InboxWebSocketConnectionDetails,
+  XInboxBackfillResult,
+} from '@unipost/sdk'
+
+type ScopedInbox = ReturnType<UniPost['inbox']['managedUser']>
+
+export function createInboxScopes(
+  workspaceApiKey: string,
+  authenticatedExternalUserId: string,
+) {
+  const client = new UniPost({ apiKey: workspaceApiKey })
+  return {
+    managed: client.inbox.managedUser(authenticatedExternalUserId),
+    creatorWorkspace: client.inbox.workspace(),
+  }
+}
+
+export async function inspectInbox(inbox: ScopedInbox): Promise<void> {
+  const page = await inbox.list({
+    source: 'x_dm',
+    isRead: false,
+    isOwn: false,
+    limit: 25,
+  })
+  const unread = await inbox.unreadCount()
+  const first = page.data[0]
+  if (!first) return
+
+  const item = await inbox.get(first.id)
+  await inbox.markRead(item.id)
+  await inbox.updateThreadState(item.id, { threadStatus: 'assigned', assignedTo: 'owner_123' })
+  const media = await inbox.mediaContext(item.id)
+  const marked = await inbox.markAllRead()
+  void [unread, media, marked]
+}
+
+export async function replyWithStableKey(
+  inbox: ScopedInbox,
+  itemId: string,
+  stableIdempotencyKey: string,
+): Promise<InboxReplyResult> {
+  const result = await inbox.reply(
+    itemId,
+    { text: 'Thanks — we are looking into this.' },
+    { idempotencyKey: stableIdempotencyKey },
+  )
+
+  if (result.state === 'completed') {
+    console.log(result.item.id)
+  } else {
+    const status = await inbox.xOutboundStatus(result.operationId)
+    console.log(status.status)
+  }
+  return result
+}
+
+export async function syncInbox(inbox: ScopedInbox): Promise<void> {
+  const ordinary: InboxSyncResult = await inbox.sync()
+
+  const request: InboxSyncRequest = {
+    xBackfill: {
+      accountId: 'sa_x_123',
+      lookbackDays: 7,
+      maxItems: 100,
+      includeReplies: true,
+      includeDms: false,
+    },
+  }
+  const estimate: XInboxBackfillResult = await inbox.sync(request)
+
+  if (estimate.confirmation_required) {
+    console.log(estimate.estimated_x_credits)
+    const confirmedRequest: InboxSyncRequest = {
+      xBackfill: {
+        ...request.xBackfill,
+        confirmationToken: estimate.confirmation_token,
+      },
+    }
+    const confirmed: XInboxBackfillResult = await inbox.sync(confirmedRequest)
+    console.log({
+      status: confirmed.status,
+      accounts_checked: confirmed.accounts_checked,
+      accepted: confirmed.accepted,
+      suppressed: confirmed.suppressed,
+      duplicates: confirmed.duplicates,
+    })
+  }
+  void ordinary
+}
+
+export function websocketDetails(inbox: ScopedInbox): InboxWebSocketConnectionDetails {
+  return inbox.webSocketConnectionDetails()
+}
+```
+
+`list(...)` accepts `source`, `isRead`, `isOwn`, and `limit`; explicit `false` values are sent rather than omitted. It is limit-only and returns one non-paginated page: the server default is 50 items and the server clamps the limit to 500. Item, read, thread-state, media-context, reply, sync, outbound-status, and WebSocket-detail methods all remain bound to the selected scope.
+
+For X replies, reuse one stable idempotency key for retries. Branch on `state`: `completed` contains the reply item, while `reconciling` means the remote service accepted the reply but UniPost is still reconciling it. Poll `xOutboundStatus(...)`; never resend a reconciling reply under a new idempotency key.
+
+`webSocketConnectionDetails()` is backend-only. It makes no connection and returns a URL plus an API key only in the `Authorization` header. Pass those details to a server-side WebSocket client that supports custom headers, never log the header, and do not put the key in the URL. Native browser WebSocket clients cannot set this required header. The SDK intentionally has no mandatory WebSocket dependency.
+
+Calling `sync()` without arguments performs ordinary polling for the selected scope. Passing an explicit `xBackfill` requests metered X history: managed-user scope narrows eligible accounts, while workspace scope can span accounts. Inspect the estimate and confirmation response, review its scope and cost, then repeat the exact request with the returned `confirmationToken`. Never schedule an unreviewed workspace-wide X backfill.
 
 ### Webhook Verification
 

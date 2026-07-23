@@ -75,8 +75,8 @@ var NotFoundError = class extends UniPostError {
 };
 var ValidationError = class extends UniPostError {
   errors;
-  constructor(message = "Validation failed", errors = {}, contract = {}) {
-    super(message, 422, "validation_error", contract);
+  constructor(message = "Validation failed", errors = {}, contract = {}, code = "validation_error") {
+    super(message, 422, code, contract);
     this.name = "ValidationError";
     this.errors = errors;
   }
@@ -103,9 +103,9 @@ var QuotaError = class extends UniPostError {
     this.name = "QuotaError";
   }
 };
-function parseApiError(status, body) {
+function parseApiError(status, body, options = {}) {
   const msg = body?.error?.message || "Unknown API error";
-  const code = body?.error?.normalized_code || body?.error?.code || "unknown";
+  const code = options.preserveCode ? body?.error?.code || body?.error?.normalized_code || "unknown" : body?.error?.normalized_code || body?.error?.code || "unknown";
   const contract = {
     error_source: body?.error?.error_source,
     error_temporality: body?.error?.error_temporality,
@@ -118,7 +118,12 @@ function parseApiError(status, body) {
     case 404:
       return new NotFoundError(msg, contract);
     case 422:
-      return new ValidationError(msg, body?.error?.errors || {}, contract);
+      return new ValidationError(
+        msg,
+        body?.error?.errors || {},
+        contract,
+        options.preserveCode ? code : void 0
+      );
     case 429: {
       const retryAfter = parseInt(String(body?.error?.retry_after ?? "1"), 10);
       return new RateLimitError(retryAfter, msg, contract);
@@ -136,7 +141,7 @@ function parseApiError(status, body) {
 
 // src/http.ts
 var MAX_RETRIES = 2;
-var SDK_VERSION = "0.5.0";
+var SDK_VERSION = "0.6.0";
 var USER_AGENT = `@unipost/sdk/${SDK_VERSION}`;
 var HttpClient = class {
   apiKey;
@@ -148,6 +153,10 @@ var HttpClient = class {
     this.timeout = options.timeout;
   }
   async request(method, path, options) {
+    const response = await this.requestWithResponse(method, path, options);
+    return response.body;
+  }
+  async requestWithResponse(method, path, options) {
     const url = new URL(path, this.baseUrl);
     if (options?.query) {
       for (const [key, value] of Object.entries(options.query)) {
@@ -172,16 +181,29 @@ var HttpClient = class {
     if (options?.body !== void 0) {
       init.body = JSON.stringify(options.body);
     }
+    if (options?.redirect !== void 0) {
+      init.redirect = options.redirect;
+    }
     let lastError = null;
+    const retryRateLimits = options?.retryRateLimits !== false;
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       try {
         const response = await fetch(url.toString(), init);
         if (response.ok) {
-          if (response.status === 204) return void 0;
-          const text = await response.text();
-          return text ? JSON.parse(text) : void 0;
+          let body2;
+          if (response.status === 204) {
+            body2 = void 0;
+          } else {
+            const text = await response.text();
+            body2 = text ? JSON.parse(text) : void 0;
+          }
+          return {
+            status: response.status,
+            headers: new Headers(response.headers),
+            body: body2
+          };
         }
-        if (response.status === 429) {
+        if (response.status === 429 && retryRateLimits) {
           const retryAfter = parseInt(response.headers.get("Retry-After") || "1", 10);
           if (attempt < MAX_RETRIES) {
             await sleep(retryAfter * 1e3);
@@ -190,9 +212,11 @@ var HttpClient = class {
           throw new RateLimitError(retryAfter);
         }
         const body = await response.json().catch(() => ({}));
-        throw parseApiError(response.status, body);
+        throw parseApiError(response.status, body, {
+          preserveCode: options?.preserveErrorCode
+        });
       } catch (err) {
-        if (err instanceof RateLimitError && attempt < MAX_RETRIES) {
+        if (retryRateLimits && err instanceof RateLimitError && attempt < MAX_RETRIES) {
           await sleep(err.retryAfter * 1e3);
           lastError = err;
           continue;
@@ -341,6 +365,23 @@ var HttpClient = class {
       }
       reader.releaseLock();
     }
+  }
+  inboxWebSocketConnectionDetails(query) {
+    const url = new URL("/v1/inbox/ws", this.baseUrl);
+    if (url.protocol === "https:") {
+      url.protocol = "wss:";
+    } else if (url.protocol === "http:") {
+      url.protocol = "ws:";
+    } else {
+      throw new Error("WebSocket connections require an HTTP or HTTPS base URL protocol.");
+    }
+    for (const [key, value] of Object.entries(query)) {
+      if (value !== void 0 && value !== null && value !== "") {
+        url.searchParams.set(key, String(value));
+      }
+    }
+    const headers = Object.freeze({ Authorization: `Bearer ${this.apiKey}` });
+    return Object.freeze({ url: url.toString(), headers });
   }
   get(path, query) {
     return this.request("GET", path, { query });
@@ -1125,6 +1166,190 @@ var Logs = class {
   }
 };
 
+// src/resources/inbox.ts
+var ScopedInbox = class {
+  #http;
+  #scope;
+  constructor(http, scope) {
+    this.#http = http;
+    this.#scope = scope;
+  }
+  #scopeQuery() {
+    const query = { inbox_scope: this.#scope.kind };
+    if (this.#scope.kind === "managed_user") {
+      query.external_user_id = this.#scope.externalUserId;
+    }
+    return query;
+  }
+  #post(path, body) {
+    return this.#http.request("POST", path, {
+      body,
+      query: this.#scopeQuery(),
+      retryRateLimits: false,
+      redirect: "manual"
+    });
+  }
+  #get(path, query) {
+    return this.#http.request("GET", path, { query, redirect: "manual" });
+  }
+  async list(params) {
+    const query = this.#scopeQuery();
+    if (params?.source !== void 0) query.source = params.source;
+    if (params?.isRead !== void 0) query.is_read = params.isRead;
+    if (params?.isOwn !== void 0) query.is_own = params.isOwn;
+    if (params?.limit !== void 0) query.limit = params.limit;
+    const response = await this.#get("/v1/inbox", query);
+    const result = { data: response.data };
+    if (response.request_id !== void 0) result.requestId = response.request_id;
+    return result;
+  }
+  async unreadCount() {
+    const response = await this.#get(
+      "/v1/inbox/unread-count",
+      this.#scopeQuery()
+    );
+    return response.data;
+  }
+  async get(id) {
+    const response = await this.#get(
+      `/v1/inbox/${encodeInboxPathSegment(id, "item")}`,
+      this.#scopeQuery()
+    );
+    return response.data;
+  }
+  async markRead(id) {
+    await this.#post(`/v1/inbox/${encodeInboxPathSegment(id, "item")}/read`);
+  }
+  async markAllRead() {
+    const response = await this.#post(
+      "/v1/inbox/mark-all-read"
+    );
+    return response.data;
+  }
+  async updateThreadState(id, request) {
+    const body = {
+      thread_status: request.threadStatus
+    };
+    if (request.assignedTo !== void 0) body.assigned_to = request.assignedTo;
+    const response = await this.#post(
+      `/v1/inbox/${encodeInboxPathSegment(id, "item")}/thread-state`,
+      body
+    );
+    return response.data;
+  }
+  async mediaContext(id) {
+    const response = await this.#get(
+      `/v1/inbox/${encodeInboxPathSegment(id, "item")}/media-context`,
+      this.#scopeQuery()
+    );
+    return response.data;
+  }
+  async sync(request) {
+    if (request === void 0) {
+      const response2 = await this.#post(
+        "/v1/inbox/sync"
+      );
+      return response2.data;
+    }
+    const source = request.xBackfill;
+    if (source === void 0) {
+      throw new Error("Inbox sync request requires xBackfill.");
+    }
+    const xBackfill = {
+      include_replies: source.includeReplies,
+      include_dms: source.includeDms
+    };
+    if (source.accountId !== void 0) xBackfill.account_id = source.accountId;
+    if (source.lookbackDays !== void 0) xBackfill.lookback_days = source.lookbackDays;
+    if (source.maxItems !== void 0) xBackfill.max_items = source.maxItems;
+    if (source.confirmationToken !== void 0) {
+      xBackfill.confirmation_token = source.confirmationToken;
+    }
+    const response = await this.#post(
+      "/v1/inbox/sync",
+      { x_backfill: xBackfill }
+    );
+    return response.data;
+  }
+  async xOutboundStatus(requestId) {
+    const response = await this.#get(
+      `/v1/inbox/x-outbound-operations/${encodeInboxPathSegment(requestId, "request")}`,
+      this.#scopeQuery()
+    );
+    return response.data;
+  }
+  webSocketConnectionDetails() {
+    return this.#http.inboxWebSocketConnectionDetails(this.#scopeQuery());
+  }
+  async reply(id, request, options) {
+    const headers = options?.idempotencyKey === void 0 ? void 0 : { "Idempotency-Key": options.idempotencyKey };
+    const response = await this.#http.requestWithResponse(
+      "POST",
+      `/v1/inbox/${encodeInboxPathSegment(id, "item")}/reply`,
+      {
+        body: { text: request.text },
+        query: this.#scopeQuery(),
+        headers,
+        retryRateLimits: false,
+        preserveErrorCode: true,
+        redirect: "manual"
+      }
+    ).catch((error) => {
+      if (error instanceof SyntaxError) {
+        throw new Error("Failed to decode Inbox reply response.");
+      }
+      throw error;
+    });
+    const operationId = response.headers.get("X-UniPost-Operation-Id")?.trim();
+    if (response.status === 200 && isRecord(response.body?.data)) {
+      const result = {
+        state: "completed",
+        item: response.body.data
+      };
+      if (operationId) result.operationId = operationId;
+      return result;
+    }
+    if (response.status === 202 && operationId && response.body?.error?.code === "X_REMOTE_ACCEPTED_RECONCILING" && typeof response.body.error.message === "string" && (response.body.request_id === void 0 || typeof response.body.request_id === "string")) {
+      const result = {
+        state: "reconciling",
+        operationId,
+        code: "X_REMOTE_ACCEPTED_RECONCILING",
+        message: response.body.error.message
+      };
+      if (response.body.request_id !== void 0) result.requestId = response.body.request_id;
+      return result;
+    }
+    throw new Error(`Failed to decode Inbox reply response with status ${response.status}.`);
+  }
+};
+function isRecord(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function encodeInboxPathSegment(value, kind) {
+  if (value === "" || value === "." || value === "..") {
+    throw new Error(`Inbox ${kind} ID must be a non-empty, non-dot path segment.`);
+  }
+  return encodeURIComponent(value);
+}
+var Inbox = class {
+  #http;
+  constructor(http) {
+    this.#http = http;
+  }
+  managedUser(externalUserId) {
+    if (externalUserId.trim().length === 0) {
+      throw new Error("Managed-user Inbox scope requires a non-empty external user ID.");
+    }
+    return new ScopedInbox(
+      this.#http,
+      Object.freeze({ kind: "managed_user", externalUserId })
+    );
+  }
+  workspace() {
+    return new ScopedInbox(this.#http, Object.freeze({ kind: "workspace" }));
+  }
+};
+
 // src/client.ts
 var DEFAULT_BASE_URL = "https://api.unipost.dev";
 var DEFAULT_TIMEOUT = 3e4;
@@ -1146,6 +1371,7 @@ var UniPost = class {
   oauth;
   usage;
   logs;
+  inbox;
   constructor(options = {}) {
     const apiKey = options.apiKey ?? getEnvVar("UNIPOST_API_KEY");
     if (!apiKey) {
@@ -1175,6 +1401,7 @@ var UniPost = class {
     this.oauth = new OAuth(http);
     this.usage = new UsageApi(http);
     this.logs = new Logs(http);
+    this.inbox = new Inbox(http);
   }
 };
 function getEnvVar(name) {

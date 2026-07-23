@@ -16,6 +16,7 @@ import { Webhooks } from "./resources/webhooks.js";
 import { OAuth } from "./resources/oauth.js";
 import { UsageApi } from "./resources/usage.js";
 import { Logs } from "./resources/logs.js";
+import { Inbox } from "./resources/inbox.js";
 import type { UniPostClientOptions } from "./types/index.js";
 
 const DEFAULT_BASE_URL = "https://api.unipost.dev";
@@ -55,6 +56,7 @@ export class UniPost {
   readonly oauth: OAuth;
   readonly usage: UsageApi;
   readonly logs: Logs;
+  readonly inbox: Inbox;
 
   constructor(options: UniPostClientOptions = {}) {
     const apiKey = options.apiKey ?? getEnvVar("UNIPOST_API_KEY");
@@ -87,6 +89,7 @@ export class UniPost {
     this.oauth = new OAuth(http);
     this.usage = new UsageApi(http);
     this.logs = new Logs(http);
+    this.inbox = new Inbox(http);
   }
 }
 

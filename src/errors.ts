@@ -59,8 +59,9 @@ export class ValidationError extends UniPostError {
     message = "Validation failed",
     errors: Record<string, string[]> = {},
     contract: ErrorContract = {},
+    code = "validation_error",
   ) {
-    super(message, 422, "validation_error", contract);
+    super(message, 422, code, contract);
     this.name = "ValidationError";
     this.errors = errors;
   }
@@ -114,9 +115,15 @@ interface ApiErrorBody {
 /**
  * Parse an API error response into the appropriate error class.
  */
-export function parseApiError(status: number, body: ApiErrorBody): UniPostError {
+export function parseApiError(
+  status: number,
+  body: ApiErrorBody,
+  options: { preserveCode?: boolean } = {},
+): UniPostError {
   const msg = body?.error?.message || "Unknown API error";
-  const code = body?.error?.normalized_code || body?.error?.code || "unknown";
+  const code = options.preserveCode
+    ? body?.error?.code || body?.error?.normalized_code || "unknown"
+    : body?.error?.normalized_code || body?.error?.code || "unknown";
   const contract: ErrorContract = {
     error_source: body?.error?.error_source,
     error_temporality: body?.error?.error_temporality,
@@ -130,7 +137,12 @@ export function parseApiError(status: number, body: ApiErrorBody): UniPostError 
     case 404:
       return new NotFoundError(msg, contract);
     case 422:
-      return new ValidationError(msg, body?.error?.errors || {}, contract);
+      return new ValidationError(
+        msg,
+        body?.error?.errors || {},
+        contract,
+        options.preserveCode ? code : undefined,
+      );
     case 429: {
       const retryAfter = parseInt(String(body?.error?.retry_after ?? "1"), 10);
       return new RateLimitError(retryAfter, msg, contract);
