@@ -70,7 +70,15 @@ export class ScopedInbox {
       body,
       query: this.#scopeQuery(),
       retryRateLimits: false,
+      redirect: "manual",
     });
+  }
+
+  #get<T>(
+    path: string,
+    query: Record<string, string | number | boolean | undefined | null>,
+  ): Promise<T> {
+    return this.#http.request<T>("GET", path, { query, redirect: "manual" });
   }
 
   async list(params?: InboxListParams): Promise<InboxListResponse> {
@@ -80,14 +88,14 @@ export class ScopedInbox {
     if (params?.isOwn !== undefined) query.is_own = params.isOwn;
     if (params?.limit !== undefined) query.limit = params.limit;
 
-    const response = await this.#http.get<InboxListWireResponse>("/v1/inbox", query);
+    const response = await this.#get<InboxListWireResponse>("/v1/inbox", query);
     const result: InboxListResponse = { data: response.data };
     if (response.request_id !== undefined) result.requestId = response.request_id;
     return result;
   }
 
   async unreadCount(): Promise<InboxUnreadCountResult> {
-    const response = await this.#http.get<InboxDataWireResponse<InboxUnreadCountResult>>(
+    const response = await this.#get<InboxDataWireResponse<InboxUnreadCountResult>>(
       "/v1/inbox/unread-count",
       this.#scopeQuery(),
     );
@@ -95,7 +103,7 @@ export class ScopedInbox {
   }
 
   async get(id: string): Promise<InboxItem> {
-    const response = await this.#http.get<InboxDataWireResponse<InboxItem>>(
+    const response = await this.#get<InboxDataWireResponse<InboxItem>>(
       `/v1/inbox/${encodeInboxPathSegment(id, "item")}`,
       this.#scopeQuery(),
     );
@@ -130,7 +138,7 @@ export class ScopedInbox {
   }
 
   async mediaContext(id: string): Promise<InboxMediaContext> {
-    const response = await this.#http.get<InboxDataWireResponse<InboxMediaContext>>(
+    const response = await this.#get<InboxDataWireResponse<InboxMediaContext>>(
       `/v1/inbox/${encodeInboxPathSegment(id, "item")}/media-context`,
       this.#scopeQuery(),
     );
@@ -174,7 +182,7 @@ export class ScopedInbox {
   }
 
   async xOutboundStatus(requestId: string): Promise<XInboxOutboundStatus> {
-    const response = await this.#http.get<InboxDataWireResponse<XInboxOutboundStatus>>(
+    const response = await this.#get<InboxDataWireResponse<XInboxOutboundStatus>>(
       `/v1/inbox/x-outbound-operations/${encodeInboxPathSegment(requestId, "request")}`,
       this.#scopeQuery(),
     );
@@ -202,6 +210,7 @@ export class ScopedInbox {
         headers,
         retryRateLimits: false,
         preserveErrorCode: true,
+        redirect: "manual",
       },
     ).catch((error: unknown) => {
       if (error instanceof SyntaxError) {

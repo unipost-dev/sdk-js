@@ -188,6 +188,7 @@ interface HttpRequestOptions {
     headers?: Record<string, string>;
     retryRateLimits?: boolean;
     preserveErrorCode?: boolean;
+    redirect?: RequestInit["redirect"];
 }
 interface HttpResponse<T> {
     status: number;

@@ -181,6 +181,9 @@ var HttpClient = class {
     if (options?.body !== void 0) {
       init.body = JSON.stringify(options.body);
     }
+    if (options?.redirect !== void 0) {
+      init.redirect = options.redirect;
+    }
     let lastError = null;
     const retryRateLimits = options?.retryRateLimits !== false;
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
@@ -1182,8 +1185,12 @@ var ScopedInbox = class {
     return this.#http.request("POST", path, {
       body,
       query: this.#scopeQuery(),
-      retryRateLimits: false
+      retryRateLimits: false,
+      redirect: "manual"
     });
+  }
+  #get(path, query) {
+    return this.#http.request("GET", path, { query, redirect: "manual" });
   }
   async list(params) {
     const query = this.#scopeQuery();
@@ -1191,20 +1198,20 @@ var ScopedInbox = class {
     if (params?.isRead !== void 0) query.is_read = params.isRead;
     if (params?.isOwn !== void 0) query.is_own = params.isOwn;
     if (params?.limit !== void 0) query.limit = params.limit;
-    const response = await this.#http.get("/v1/inbox", query);
+    const response = await this.#get("/v1/inbox", query);
     const result = { data: response.data };
     if (response.request_id !== void 0) result.requestId = response.request_id;
     return result;
   }
   async unreadCount() {
-    const response = await this.#http.get(
+    const response = await this.#get(
       "/v1/inbox/unread-count",
       this.#scopeQuery()
     );
     return response.data;
   }
   async get(id) {
-    const response = await this.#http.get(
+    const response = await this.#get(
       `/v1/inbox/${encodeInboxPathSegment(id, "item")}`,
       this.#scopeQuery()
     );
@@ -1231,7 +1238,7 @@ var ScopedInbox = class {
     return response.data;
   }
   async mediaContext(id) {
-    const response = await this.#http.get(
+    const response = await this.#get(
       `/v1/inbox/${encodeInboxPathSegment(id, "item")}/media-context`,
       this.#scopeQuery()
     );
@@ -1265,7 +1272,7 @@ var ScopedInbox = class {
     return response.data;
   }
   async xOutboundStatus(requestId) {
-    const response = await this.#http.get(
+    const response = await this.#get(
       `/v1/inbox/x-outbound-operations/${encodeInboxPathSegment(requestId, "request")}`,
       this.#scopeQuery()
     );
@@ -1284,7 +1291,8 @@ var ScopedInbox = class {
         query: this.#scopeQuery(),
         headers,
         retryRateLimits: false,
-        preserveErrorCode: true
+        preserveErrorCode: true,
+        redirect: "manual"
       }
     ).catch((error) => {
       if (error instanceof SyntaxError) {

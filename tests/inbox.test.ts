@@ -519,6 +519,7 @@ describe("Inbox", () => {
     expect(mockFetch).toHaveBeenCalledTimes(1);
     const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
     expect(init.method).toBe("GET");
+    expect(init.redirect).toBe("manual");
 
     const url = requestedUrl();
     expect(url.pathname).toBe("/v1/inbox");
@@ -651,6 +652,7 @@ describe("Inbox", () => {
     expect(mockFetch).toHaveBeenCalledTimes(1);
     const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
     expect(init.method).toBe("POST");
+    expect(init.redirect).toBe("manual");
     expect(JSON.parse(init.body as string)).toEqual({ text: "Thanks for reaching out!" });
     const headers = new Headers(init.headers);
     expect(headers.get("Idempotency-Key")).toBe("idem-exact-value");
@@ -815,6 +817,63 @@ describe("Inbox", () => {
     expect(thrown).toBeInstanceOf(UniPostError);
     expect(thrown).toMatchObject({ status, code });
     expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("surfaces an Inbox redirect response without following or replaying the POST", async () => {
+    mockFetch.mockResolvedValueOnce(
+      jsonResponse(
+        { error: { code: "TEMPORARY_REDIRECT", message: "Use the canonical API host" } },
+        307,
+        { Location: "https://canonical.example.test/v1/inbox/inbox_1/reply" },
+      ),
+    );
+
+    await expect(
+      client.inbox.workspace().reply("inbox_1", { text: "Reply" }),
+    ).rejects.toMatchObject({ status: 307, code: "TEMPORARY_REDIRECT" });
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+    expect(init.method).toBe("POST");
+    expect(init.redirect).toBe("manual");
+  });
+
+  it.each([
+    { name: "404", status: 404, code: "NOT_FOUND" },
+    { name: "scope lookup failure", status: 500, code: "INBOX_SCOPE_LOOKUP_FAILED" },
+  ])(
+    "does not fall back to workspace scope after a managed-user $name response",
+    async ({ status, code }) => {
+      mockFetch.mockResolvedValueOnce(
+        jsonResponse({ error: { code, message: `Managed scope failed: ${code}` } }, status),
+      );
+
+      await expect(client.inbox.managedUser("bound user").list()).rejects.toBeInstanceOf(
+        UniPostError,
+      );
+
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+      expect(init.redirect).toBe("manual");
+      const url = requestedUrl();
+      expect(sortedQueryEntries(url)).toEqual([
+        ["external_user_id", "bound user"],
+        ["inbox_scope", "managed_user"],
+      ]);
+      expect(url.searchParams.getAll("inbox_scope")).toEqual(["managed_user"]);
+      expect(url.searchParams.getAll("external_user_id")).toEqual(["bound user"]);
+      expect(url.search).not.toContain("workspace");
+    },
+  );
+
+  it("leaves non-Inbox resources on Fetch default redirect handling", async () => {
+    mockFetch.mockResolvedValueOnce(jsonResponse({ data: [] }));
+
+    await client.accounts.list();
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+    expect(init).not.toHaveProperty("redirect");
   });
 
   it("keeps normalized-code precedence for ordinary non-reply requests", async () => {
@@ -1004,6 +1063,7 @@ describe("Inbox", () => {
       expect(mockFetch).toHaveBeenCalledTimes(1);
       const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
       expect(init.method).toBe(expectedMethod);
+      expect(init.redirect).toBe("manual");
       if (expectedBody === undefined) {
         expect(init.body).toBeUndefined();
       } else {

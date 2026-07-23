@@ -23,6 +23,7 @@ interface HttpRequestOptions {
   headers?: Record<string, string>;
   retryRateLimits?: boolean;
   preserveErrorCode?: boolean;
+  redirect?: RequestInit["redirect"];
 }
 
 interface HttpResponse<T> {
@@ -84,6 +85,9 @@ export class HttpClient {
 
     if (options?.body !== undefined) {
       init.body = JSON.stringify(options.body);
+    }
+    if (options?.redirect !== undefined) {
+      init.redirect = options.redirect;
     }
 
     let lastError: Error | null = null;
