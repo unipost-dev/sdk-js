@@ -229,10 +229,13 @@ interface SocialAccount {
     profile_name?: string;
     platform: Platform;
     account_name?: string | null;
+    external_account_id?: string;
+    connected_at?: string;
     external_user_id?: string;
     external_user_email?: string;
     status: AccountStatus;
     connection_type?: ConnectionType;
+    scope?: string[];
 }
 interface AccountHealth {
     social_account_id: string;

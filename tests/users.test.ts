@@ -42,18 +42,23 @@ describe("Managed Users", () => {
         {
           id: "acct_1",
           profile_id: "prof_1",
+          profile_name: "Brand US",
           platform: "twitter",
           account_name: "Example",
+          external_account_id: "provider_1",
+          connected_at: "2026-07-01T00:00:00Z",
           external_user_id: "user_1",
           external_user_email: "person@example.com",
           status: "active",
           connection_type: "managed",
+          scope: ["tweet.read", "tweet.write"],
         },
       ],
     };
 
     expect(summary.disconnected_count).toBe(0);
     expect(detail.accounts[0]?.id).toBe("acct_1");
+    expect(detail.accounts[0]?.external_account_id).toBe("provider_1");
   });
 
   it("lists managed users inside the selected profile", async () => {
