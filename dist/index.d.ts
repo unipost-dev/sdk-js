@@ -551,13 +551,32 @@ interface GetConnectUrlParams {
     platform: string;
     redirectUrl?: string;
 }
-interface ManagedUser {
+interface ListManagedUsersParams {
+    profileId: string;
+    limit?: number;
+}
+interface GetManagedUserParams {
+    profileId: string;
+    externalUserId: string;
+}
+interface ManagedUserSummary {
     external_user_id: string;
     external_user_email?: string;
     account_count?: number;
     platform_counts?: Record<string, number>;
     reconnect_count?: number;
+    disconnected_count?: number;
+    first_connected_at?: string;
+    last_refreshed_at?: string;
 }
+interface ManagedUserDetail {
+    external_user_id: string;
+    external_user_email?: string;
+    account_count: number;
+    accounts: SocialAccount[];
+}
+/** @deprecated Use ManagedUserSummary for list responses. */
+type ManagedUser = ManagedUserSummary;
 interface MediaUploadRequest {
     filename: string;
     contentType: string;
@@ -1024,10 +1043,10 @@ declare class Connect {
 declare class Users {
     private readonly http;
     constructor(http: HttpClient);
-    /** List all managed users. */
-    list(): Promise<PaginatedResponse<ManagedUser>>;
-    /** Get a single managed user by external_user_id. */
-    get(externalUserId: string): Promise<ManagedUser>;
+    /** List managed users inside a profile. */
+    list(params: ListManagedUsersParams): Promise<PaginatedResponse<ManagedUserSummary>>;
+    /** Get one managed user inside a profile by external_user_id. */
+    get(params: GetManagedUserParams): Promise<ManagedUserDetail>;
 }
 
 declare class Webhooks {
@@ -1192,4 +1211,4 @@ declare class QuotaError extends UniPostError {
  */
 declare function verifyWebhookSignature(options: VerifyWebhookOptions): Promise<boolean>;
 
-export { type AccountHealth, type AccountStatus, type AnalyticsQueryParams, type AnalyticsRollup, type AnalyticsRollupParams, type ApiKey, type ApiKeyEnvironment, type AudioOverlayCreateParams, type AudioOverlayError, type AudioOverlayFit, type AudioOverlayJob, type AudioOverlayMode, type AudioOverlayRequestOptions, type AudioOverlayStatus, AuthError, type BulkPostError, type BulkPostResult, type ConnectAccountParams, type ConnectSession, type ConnectionType, type CreateApiKeyParams, type CreateConnectSessionParams, type CreatePlatformCredentialParams, type CreatePostParams, type CreatePostPlatformPost, type CreateProfileParams, type CreateWebhookParams, type CreatedApiKey, type DeliveryJob, type ErrorContract, type ErrorSource, type ErrorTemporality, type GetConnectUrlParams, type Granularity, type GroupBy, type InboxItem, type InboxListParams, type InboxListResponse, type InboxMarkAllReadResult, type InboxMediaContext, type InboxReplyOptions, type InboxReplyRequest, type InboxReplyResult, type InboxSource, type InboxSyncAccountDetail, type InboxSyncError, type InboxSyncRequest, type InboxSyncResult, type InboxThreadStateRequest, type InboxThreadStatus, type InboxUnreadCountResult, type InboxWebSocketConnectionDetails, type ListAccountsParams, type ListDeliveryJobsParams, type ListLogsParams, type ListPostsParams, type LogCategory, type LogEntry, type LogLevel, type LogSource, type LogStatus, type LogStreamOptions, type LogStreamParams, type ManagedUser, type MediaUploadRequest, type MediaUploadResponse, NotFoundError, type OAuthConnectResponse, type PaginatedResponse, type Plan, type Platform, type PlatformCredential, PlatformError, type PlatformResult, type Post, type PostAnalyticsItem, type PostPreviewLink, type PostQueueSnapshot, type PostStatus, type Profile, type ProviderError, QuotaError, RateLimitError, type RetryPolicy, type RetryState, type SocialAccount, UniPost, type UniPostClientOptions, UniPostError, type UpdatePostParams, type UpdateProfileParams, type UpdateWebhookParams, type UpdateWorkspaceParams, type Usage, ValidationError, type ValidationIssue, type ValidationResult, type VerifyWebhookOptions, type WebhookEvent, type WebhookEventType, type WebhookSubscription, type WebhookSubscriptionSecret, type Workspace, type XInboxBackfillAccountResult, type XInboxBackfillRequest, type XInboxBackfillResult, type XInboxOutboundStatus, verifyWebhookSignature };
+export { type AccountHealth, type AccountStatus, type AnalyticsQueryParams, type AnalyticsRollup, type AnalyticsRollupParams, type ApiKey, type ApiKeyEnvironment, type AudioOverlayCreateParams, type AudioOverlayError, type AudioOverlayFit, type AudioOverlayJob, type AudioOverlayMode, type AudioOverlayRequestOptions, type AudioOverlayStatus, AuthError, type BulkPostError, type BulkPostResult, type ConnectAccountParams, type ConnectSession, type ConnectionType, type CreateApiKeyParams, type CreateConnectSessionParams, type CreatePlatformCredentialParams, type CreatePostParams, type CreatePostPlatformPost, type CreateProfileParams, type CreateWebhookParams, type CreatedApiKey, type DeliveryJob, type ErrorContract, type ErrorSource, type ErrorTemporality, type GetConnectUrlParams, type GetManagedUserParams, type Granularity, type GroupBy, type InboxItem, type InboxListParams, type InboxListResponse, type InboxMarkAllReadResult, type InboxMediaContext, type InboxReplyOptions, type InboxReplyRequest, type InboxReplyResult, type InboxSource, type InboxSyncAccountDetail, type InboxSyncError, type InboxSyncRequest, type InboxSyncResult, type InboxThreadStateRequest, type InboxThreadStatus, type InboxUnreadCountResult, type InboxWebSocketConnectionDetails, type ListAccountsParams, type ListDeliveryJobsParams, type ListLogsParams, type ListManagedUsersParams, type ListPostsParams, type LogCategory, type LogEntry, type LogLevel, type LogSource, type LogStatus, type LogStreamOptions, type LogStreamParams, type ManagedUser, type ManagedUserDetail, type ManagedUserSummary, type MediaUploadRequest, type MediaUploadResponse, NotFoundError, type OAuthConnectResponse, type PaginatedResponse, type Plan, type Platform, type PlatformCredential, PlatformError, type PlatformResult, type Post, type PostAnalyticsItem, type PostPreviewLink, type PostQueueSnapshot, type PostStatus, type Profile, type ProviderError, QuotaError, RateLimitError, type RetryPolicy, type RetryState, type SocialAccount, UniPost, type UniPostClientOptions, UniPostError, type UpdatePostParams, type UpdateProfileParams, type UpdateWebhookParams, type UpdateWorkspaceParams, type Usage, ValidationError, type ValidationIssue, type ValidationResult, type VerifyWebhookOptions, type WebhookEvent, type WebhookEventType, type WebhookSubscription, type WebhookSubscriptionSecret, type Workspace, type XInboxBackfillAccountResult, type XInboxBackfillRequest, type XInboxBackfillResult, type XInboxOutboundStatus, verifyWebhookSignature };
