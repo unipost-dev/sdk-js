@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.7.0 (2026-07-23)
+
+- Require explicit Profile scope for Managed User list and detail operations
+- Use Profile-nested Managed User API routes with encoded identifiers
+- Export complete Managed User summary and account-detail response types
+- Include the normalized per-result Post error code introduced on the 0.6 branch
+
 ## 0.6.0 (2026-07-22)
 
 - Add explicit managed-user and workspace Inbox scopes with no implicit workspace fallback
