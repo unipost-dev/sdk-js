@@ -1,11 +1,22 @@
 // Package self-reference exercises the export map and its built dist declarations.
-import { UniPost } from "@unipost/sdk";
+import {
+  InvalidResponseError,
+  ManagedUserNotFoundError,
+  ProfileAccessError,
+  ServiceUnavailableError,
+  TimeoutError,
+  UniPost,
+} from "@unipost/sdk";
 import type {
   InboxListResponse,
   InboxReplyResult,
   InboxSyncRequest,
   InboxSyncResult,
   InboxWebSocketConnectionDetails,
+  ManagedUser,
+  ManagedUserDetail,
+  ManagedUserSummary,
+  PaginatedResponse,
   XInboxBackfillResult,
 } from "@unipost/sdk";
 
@@ -23,6 +34,29 @@ async function declarationConsumer(): Promise<void> {
   });
   const managed = client.inbox.managedUser("authenticated_user_123");
   const workspace = client.inbox.workspace();
+
+  const legacyListPromise = client.users.list();
+  type LegacyListIsExact = Assert<
+    Equal<Awaited<typeof legacyListPromise>, PaginatedResponse<ManagedUser>>
+  >;
+  const scopedListPromise = client.users.list({ profileId: "prof_1", limit: 100 });
+  type ScopedListIsExact = Assert<
+    Equal<
+      Awaited<typeof scopedListPromise>,
+      PaginatedResponse<ManagedUserSummary>
+    >
+  >;
+  const legacyUserPromise = client.users.get("user_1");
+  type LegacyUserIsExact = Assert<
+    Equal<Awaited<typeof legacyUserPromise>, ManagedUser>
+  >;
+  const scopedUserPromise = client.users.get({
+    profileId: "prof_1",
+    externalUserId: "user_1",
+  });
+  type ScopedUserIsExact = Assert<
+    Equal<Awaited<typeof scopedUserPromise>, ManagedUserDetail>
+  >;
 
   const managedPage: InboxListResponse = await managed.list({
     isRead: false,
@@ -77,10 +111,19 @@ async function declarationConsumer(): Promise<void> {
     backfill,
     managedWebSocket,
     workspaceWebSocket,
+    InvalidResponseError,
+    ManagedUserNotFoundError,
+    ProfileAccessError,
+    ServiceUnavailableError,
+    TimeoutError,
   ];
   void (0 as unknown as ReplyResultIsExact);
   void (0 as unknown as OrdinarySyncIsExact);
   void (0 as unknown as BackfillSyncIsExact);
+  void (0 as unknown as LegacyListIsExact);
+  void (0 as unknown as ScopedListIsExact);
+  void (0 as unknown as LegacyUserIsExact);
+  void (0 as unknown as ScopedUserIsExact);
 }
 
 void declarationConsumer;

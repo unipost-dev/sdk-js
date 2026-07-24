@@ -3,14 +3,15 @@
 Official UniPost API client for JavaScript and TypeScript.
 Post to 7 social platforms with one API call.
 
-## Latest release: v0.6.0
+## Latest release: v0.6.1
 
-Scoped Inbox support is now available for server-side applications.
+Profile-scoped Managed User reads are now available without breaking existing
+0.6 integrations.
 
-- Bind every Inbox operation to either `client.inbox.managedUser(id)` or `client.inbox.workspace()`.
-- List, read, reply, thread state, media context, sync, X backfill, X reply reconciliation, and WebSocket connection details are fully typed.
-- X replies distinguish completed delivery from accepted-but-reconciling delivery.
-- WebSocket helpers return connection details without opening a connection or adding a production dependency.
+- Pass `profileId` to Managed User list and detail calls for deterministic isolation.
+- Profile and external-user path segments are encoded and scoped failures never fall back to bare routes.
+- Scoped responses are validated at runtime and expose dedicated access, timeout, outage, and invalid-response errors.
+- The original `users.list()` and `users.get(externalUserId)` signatures remain available for 0.6 compatibility.
 
 ## Installation
 
@@ -216,6 +217,14 @@ const user = await client.users.get({
 })
 ```
 
+The `0.6.0` bare-route signatures remain available as deprecated compatibility
+overloads. Scoped calls never retry against them after a Profile request fails:
+
+```typescript
+await client.users.list()
+await client.users.get('your_user_123')
+```
+
 ### Get Connect URL (Your Own Accounts)
 
 ```typescript
@@ -359,21 +368,45 @@ const isValid = await verifyWebhookSignature({
 ## Error Handling
 
 ```typescript
-import { UniPost, AuthError, RateLimitError, UniPostError } from '@unipost/sdk'
+import {
+  UniPost,
+  AuthError,
+  ProfileAccessError,
+  ManagedUserNotFoundError,
+  RateLimitError,
+  TimeoutError,
+  ServiceUnavailableError,
+  InvalidResponseError,
+  UniPostError,
+} from '@unipost/sdk'
 
 try {
-  await client.posts.create({ ... })
+  await client.users.list({ profileId: 'profile_123', limit: 100 })
 } catch (error) {
   if (error instanceof AuthError) {
     // 401 - API key invalid
+  } else if (error instanceof ProfileAccessError) {
+    // Profile missing or unavailable to this API key
+  } else if (error instanceof ManagedUserNotFoundError) {
+    // No matching Managed User inside the selected Profile
   } else if (error instanceof RateLimitError) {
     // 429 - retry after error.retryAfter seconds
+  } else if (error instanceof TimeoutError) {
+    // Request exceeded the configured timeout
+  } else if (error instanceof ServiceUnavailableError) {
+    // Network failure or UniPost 502/503/504 response
+  } else if (error instanceof InvalidResponseError) {
+    // Successful response did not match the SDK contract
   } else if (error instanceof UniPostError) {
     // Other API error
     console.error(error.status, error.code, error.message)
   }
 }
 ```
+
+The timeout, network-unavailable, and response-contract errors above apply to the
+Profile-scoped Managed User methods. Existing 0.6.0 resources retain their prior
+transport-error behavior for patch-version compatibility.
 
 ## TypeScript
 
@@ -392,6 +425,12 @@ import type { Post, SocialAccount, Platform, CreatePostParams } from '@unipost/s
 - Edge runtimes (Cloudflare Workers, Vercel Edge)
 
 Zero production dependencies.
+
+After publishing a release, verify the registry artifact metadata with:
+
+```bash
+npm view @unipost/sdk@0.6.1 dist.integrity dist.shasum --json
+```
 
 ## License
 

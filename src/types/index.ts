@@ -1,5 +1,3 @@
-import type { SocialAccount } from "./accounts.js";
-
 export type {
   Platform,
   AccountStatus,
@@ -191,6 +189,14 @@ export interface GetConnectUrlParams {
   redirectUrl?: string;
 }
 
+export interface ManagedUser {
+  external_user_id: string;
+  external_user_email?: string;
+  account_count?: number;
+  platform_counts?: Record<string, number>;
+  reconnect_count?: number;
+}
+
 export interface ListManagedUsersParams {
   profileId: string;
   limit?: number;
@@ -204,23 +210,35 @@ export interface GetManagedUserParams {
 export interface ManagedUserSummary {
   external_user_id: string;
   external_user_email?: string;
-  account_count?: number;
-  platform_counts?: Record<string, number>;
-  reconnect_count?: number;
-  disconnected_count?: number;
-  first_connected_at?: string;
+  account_count: number;
+  platform_counts: Record<string, number>;
+  reconnect_count: number;
+  disconnected_count: number;
+  first_connected_at: string;
   last_refreshed_at?: string;
+}
+
+export interface ManagedUserAccount {
+  id: string;
+  profile_id: string;
+  profile_name?: string;
+  platform: string;
+  account_name?: string | null;
+  external_account_id?: string;
+  connected_at?: string;
+  status: string;
+  connection_type?: string;
+  external_user_id?: string;
+  external_user_email?: string;
+  scope?: string[];
 }
 
 export interface ManagedUserDetail {
   external_user_id: string;
   external_user_email?: string;
   account_count: number;
-  accounts: SocialAccount[];
+  accounts: ManagedUserAccount[];
 }
-
-/** @deprecated Use ManagedUserSummary for list responses. */
-export type ManagedUser = ManagedUserSummary;
 
 // --- Media ---
 

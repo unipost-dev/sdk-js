@@ -188,6 +188,7 @@ interface HttpRequestOptions {
     headers?: Record<string, string>;
     retryRateLimits?: boolean;
     preserveErrorCode?: boolean;
+    errorContext?: "managed_users";
     redirect?: RequestInit["redirect"];
 }
 interface HttpResponse<T> {
@@ -554,6 +555,13 @@ interface GetConnectUrlParams {
     platform: string;
     redirectUrl?: string;
 }
+interface ManagedUser {
+    external_user_id: string;
+    external_user_email?: string;
+    account_count?: number;
+    platform_counts?: Record<string, number>;
+    reconnect_count?: number;
+}
 interface ListManagedUsersParams {
     profileId: string;
     limit?: number;
@@ -565,21 +573,33 @@ interface GetManagedUserParams {
 interface ManagedUserSummary {
     external_user_id: string;
     external_user_email?: string;
-    account_count?: number;
-    platform_counts?: Record<string, number>;
-    reconnect_count?: number;
-    disconnected_count?: number;
-    first_connected_at?: string;
+    account_count: number;
+    platform_counts: Record<string, number>;
+    reconnect_count: number;
+    disconnected_count: number;
+    first_connected_at: string;
     last_refreshed_at?: string;
+}
+interface ManagedUserAccount {
+    id: string;
+    profile_id: string;
+    profile_name?: string;
+    platform: string;
+    account_name?: string | null;
+    external_account_id?: string;
+    connected_at?: string;
+    status: string;
+    connection_type?: string;
+    external_user_id?: string;
+    external_user_email?: string;
+    scope?: string[];
 }
 interface ManagedUserDetail {
     external_user_id: string;
     external_user_email?: string;
     account_count: number;
-    accounts: SocialAccount[];
+    accounts: ManagedUserAccount[];
 }
-/** @deprecated Use ManagedUserSummary for list responses. */
-type ManagedUser = ManagedUserSummary;
 interface MediaUploadRequest {
     filename: string;
     contentType: string;
@@ -1046,8 +1066,12 @@ declare class Connect {
 declare class Users {
     private readonly http;
     constructor(http: HttpClient);
+    /** @deprecated Prefer the Profile-scoped overload. */
+    list(): Promise<PaginatedResponse<ManagedUser>>;
     /** List managed users inside a profile. */
     list(params: ListManagedUsersParams): Promise<PaginatedResponse<ManagedUserSummary>>;
+    /** @deprecated Prefer the Profile-scoped overload. */
+    get(externalUserId: string): Promise<ManagedUser>;
     /** Get one managed user inside a profile by external_user_id. */
     get(params: GetManagedUserParams): Promise<ManagedUserDetail>;
 }
@@ -1186,6 +1210,14 @@ declare class AuthError extends UniPostError {
 declare class NotFoundError extends UniPostError {
     constructor(message?: string, contract?: ErrorContract);
 }
+/** A Profile is missing or is not accessible to the current API key. */
+declare class ProfileAccessError extends UniPostError {
+    constructor(message?: string, status?: number, code?: string, contract?: ErrorContract);
+}
+/** A Managed User does not exist inside the selected Profile. */
+declare class ManagedUserNotFoundError extends UniPostError {
+    constructor(message?: string, code?: string, contract?: ErrorContract);
+}
 /** 422 - Validation error. */
 declare class ValidationError extends UniPostError {
     readonly errors: Record<string, string[]>;
@@ -1205,6 +1237,19 @@ declare class PlatformError extends UniPostError {
 declare class QuotaError extends UniPostError {
     constructor(message?: string, contract?: ErrorContract);
 }
+/** A successful API response did not match the SDK contract. */
+declare class InvalidResponseError extends UniPostError {
+    readonly path: string;
+    constructor(message: string, path: string);
+}
+/** The request exceeded the configured SDK timeout. */
+declare class TimeoutError extends UniPostError {
+    constructor(message?: string);
+}
+/** UniPost could not be reached or returned a gateway/service outage response. */
+declare class ServiceUnavailableError extends UniPostError {
+    constructor(message?: string, status?: number, code?: string, contract?: ErrorContract);
+}
 
 /**
  * Verify the signature of a UniPost webhook request.
@@ -1214,4 +1259,4 @@ declare class QuotaError extends UniPostError {
  */
 declare function verifyWebhookSignature(options: VerifyWebhookOptions): Promise<boolean>;
 
-export { type AccountHealth, type AccountStatus, type AnalyticsQueryParams, type AnalyticsRollup, type AnalyticsRollupParams, type ApiKey, type ApiKeyEnvironment, type AudioOverlayCreateParams, type AudioOverlayError, type AudioOverlayFit, type AudioOverlayJob, type AudioOverlayMode, type AudioOverlayRequestOptions, type AudioOverlayStatus, AuthError, type BulkPostError, type BulkPostResult, type ConnectAccountParams, type ConnectSession, type ConnectionType, type CreateApiKeyParams, type CreateConnectSessionParams, type CreatePlatformCredentialParams, type CreatePostParams, type CreatePostPlatformPost, type CreateProfileParams, type CreateWebhookParams, type CreatedApiKey, type DeliveryJob, type ErrorContract, type ErrorSource, type ErrorTemporality, type GetConnectUrlParams, type GetManagedUserParams, type Granularity, type GroupBy, type InboxItem, type InboxListParams, type InboxListResponse, type InboxMarkAllReadResult, type InboxMediaContext, type InboxReplyOptions, type InboxReplyRequest, type InboxReplyResult, type InboxSource, type InboxSyncAccountDetail, type InboxSyncError, type InboxSyncRequest, type InboxSyncResult, type InboxThreadStateRequest, type InboxThreadStatus, type InboxUnreadCountResult, type InboxWebSocketConnectionDetails, type ListAccountsParams, type ListDeliveryJobsParams, type ListLogsParams, type ListManagedUsersParams, type ListPostsParams, type LogCategory, type LogEntry, type LogLevel, type LogSource, type LogStatus, type LogStreamOptions, type LogStreamParams, type ManagedUser, type ManagedUserDetail, type ManagedUserSummary, type MediaUploadRequest, type MediaUploadResponse, NotFoundError, type OAuthConnectResponse, type PaginatedResponse, type Plan, type Platform, type PlatformCredential, PlatformError, type PlatformResult, type Post, type PostAnalyticsItem, type PostPreviewLink, type PostQueueSnapshot, type PostStatus, type Profile, type ProviderError, QuotaError, RateLimitError, type RetryPolicy, type RetryState, type SocialAccount, UniPost, type UniPostClientOptions, UniPostError, type UpdatePostParams, type UpdateProfileParams, type UpdateWebhookParams, type UpdateWorkspaceParams, type Usage, ValidationError, type ValidationIssue, type ValidationResult, type VerifyWebhookOptions, type WebhookEvent, type WebhookEventType, type WebhookSubscription, type WebhookSubscriptionSecret, type Workspace, type XInboxBackfillAccountResult, type XInboxBackfillRequest, type XInboxBackfillResult, type XInboxOutboundStatus, verifyWebhookSignature };
+export { type AccountHealth, type AccountStatus, type AnalyticsQueryParams, type AnalyticsRollup, type AnalyticsRollupParams, type ApiKey, type ApiKeyEnvironment, type AudioOverlayCreateParams, type AudioOverlayError, type AudioOverlayFit, type AudioOverlayJob, type AudioOverlayMode, type AudioOverlayRequestOptions, type AudioOverlayStatus, AuthError, type BulkPostError, type BulkPostResult, type ConnectAccountParams, type ConnectSession, type ConnectionType, type CreateApiKeyParams, type CreateConnectSessionParams, type CreatePlatformCredentialParams, type CreatePostParams, type CreatePostPlatformPost, type CreateProfileParams, type CreateWebhookParams, type CreatedApiKey, type DeliveryJob, type ErrorContract, type ErrorSource, type ErrorTemporality, type GetConnectUrlParams, type GetManagedUserParams, type Granularity, type GroupBy, type InboxItem, type InboxListParams, type InboxListResponse, type InboxMarkAllReadResult, type InboxMediaContext, type InboxReplyOptions, type InboxReplyRequest, type InboxReplyResult, type InboxSource, type InboxSyncAccountDetail, type InboxSyncError, type InboxSyncRequest, type InboxSyncResult, type InboxThreadStateRequest, type InboxThreadStatus, type InboxUnreadCountResult, type InboxWebSocketConnectionDetails, InvalidResponseError, type ListAccountsParams, type ListDeliveryJobsParams, type ListLogsParams, type ListManagedUsersParams, type ListPostsParams, type LogCategory, type LogEntry, type LogLevel, type LogSource, type LogStatus, type LogStreamOptions, type LogStreamParams, type ManagedUser, type ManagedUserAccount, type ManagedUserDetail, ManagedUserNotFoundError, type ManagedUserSummary, type MediaUploadRequest, type MediaUploadResponse, NotFoundError, type OAuthConnectResponse, type PaginatedResponse, type Plan, type Platform, type PlatformCredential, PlatformError, type PlatformResult, type Post, type PostAnalyticsItem, type PostPreviewLink, type PostQueueSnapshot, type PostStatus, type Profile, ProfileAccessError, type ProviderError, QuotaError, RateLimitError, type RetryPolicy, type RetryState, ServiceUnavailableError, type SocialAccount, TimeoutError, UniPost, type UniPostClientOptions, UniPostError, type UpdatePostParams, type UpdateProfileParams, type UpdateWebhookParams, type UpdateWorkspaceParams, type Usage, ValidationError, type ValidationIssue, type ValidationResult, type VerifyWebhookOptions, type WebhookEvent, type WebhookEventType, type WebhookSubscription, type WebhookSubscriptionSecret, type Workspace, type XInboxBackfillAccountResult, type XInboxBackfillRequest, type XInboxBackfillResult, type XInboxOutboundStatus, verifyWebhookSignature };

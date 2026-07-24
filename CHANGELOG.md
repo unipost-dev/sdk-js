@@ -1,10 +1,12 @@
 # Changelog
 
-## 0.7.0 (2026-07-23)
+## 0.6.1 (2026-07-23)
 
-- Require explicit Profile scope for Managed User list and detail operations
+- Add explicit Profile scope for Managed User list and detail operations while retaining the 0.6.0 signatures
 - Use Profile-nested Managed User API routes with encoded identifiers
-- Export complete Managed User summary and account-detail response types
+- Export strict Managed User summary, detail, and account response types
+- Validate scoped inputs and successful response bodies without falling back to bare routes
+- Distinguish Profile access, missing Managed User, timeout, service outage, and invalid response errors
 - Include the normalized per-result Post error code introduced on the 0.6 branch
 
 ## 0.6.0 (2026-07-22)

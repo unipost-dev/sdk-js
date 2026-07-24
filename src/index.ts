@@ -6,10 +6,15 @@ export {
   UniPostError,
   AuthError,
   NotFoundError,
+  ProfileAccessError,
+  ManagedUserNotFoundError,
   ValidationError,
   RateLimitError,
   PlatformError,
   QuotaError,
+  InvalidResponseError,
+  TimeoutError,
+  ServiceUnavailableError,
 } from "./errors.js";
 export type { ErrorContract } from "./errors.js";
 
@@ -80,6 +85,7 @@ export type {
   ListManagedUsersParams,
   GetManagedUserParams,
   ManagedUserSummary,
+  ManagedUserAccount,
   ManagedUserDetail,
   ManagedUser,
   // Media
