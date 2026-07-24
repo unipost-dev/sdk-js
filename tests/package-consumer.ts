@@ -17,6 +17,7 @@ import type {
   ManagedUserDetail,
   ManagedUserSummary,
   PaginatedResponse,
+  PlatformResult,
   XInboxBackfillResult,
 } from "@unipost/sdk";
 
@@ -57,6 +58,79 @@ async function declarationConsumer(): Promise<void> {
   type ScopedUserIsExact = Assert<
     Equal<Awaited<typeof scopedUserPromise>, ManagedUserDetail>
   >;
+
+  const platformResult: PlatformResult = {
+    social_account_id: "sa_1",
+    status: "failed",
+    error_code: "platform_publish_failed",
+    failure_stage: "publish",
+    platform_error_code: "187",
+    is_retriable: false,
+    next_action: "edit_content",
+    error_source: "platform",
+    error_temporality: "permanent",
+    provider_error: { provider: "twitter", code: "187" },
+    retry_policy: {
+      is_retriable: false,
+      will_retry: false,
+      retry_state: "not_retriable",
+      manual_retry_allowed: false,
+    },
+  };
+  const errorCode: string | undefined = platformResult.error_code;
+  const failureStage: string | undefined = platformResult.failure_stage;
+  const platformErrorCode: string | undefined = platformResult.platform_error_code;
+  const isRetriable: boolean | undefined = platformResult.is_retriable;
+  const nextAction: string | undefined = platformResult.next_action;
+
+  const createdPost = await client.posts.create({ caption: "created" });
+  const fetchedPost = await client.posts.get("post_1");
+  const listedPosts = await client.posts.list({ status: "failed" });
+  const updatedPost = await client.posts.update("post_1", { caption: "updated" });
+  const createdResultContract = [
+    createdPost.results?.[0]?.error_code,
+    createdPost.results?.[0]?.failure_stage,
+    createdPost.results?.[0]?.platform_error_code,
+    createdPost.results?.[0]?.is_retriable,
+    createdPost.results?.[0]?.next_action,
+    createdPost.results?.[0]?.error_source,
+    createdPost.results?.[0]?.error_temporality,
+    createdPost.results?.[0]?.provider_error,
+    createdPost.results?.[0]?.retry_policy,
+  ];
+  const fetchedResultContract = [
+    fetchedPost.results?.[0]?.error_code,
+    fetchedPost.results?.[0]?.failure_stage,
+    fetchedPost.results?.[0]?.platform_error_code,
+    fetchedPost.results?.[0]?.is_retriable,
+    fetchedPost.results?.[0]?.next_action,
+    fetchedPost.results?.[0]?.error_source,
+    fetchedPost.results?.[0]?.error_temporality,
+    fetchedPost.results?.[0]?.provider_error,
+    fetchedPost.results?.[0]?.retry_policy,
+  ];
+  const listedResultContract = [
+    listedPosts.data[0]?.results?.[0]?.error_code,
+    listedPosts.data[0]?.results?.[0]?.failure_stage,
+    listedPosts.data[0]?.results?.[0]?.platform_error_code,
+    listedPosts.data[0]?.results?.[0]?.is_retriable,
+    listedPosts.data[0]?.results?.[0]?.next_action,
+    listedPosts.data[0]?.results?.[0]?.error_source,
+    listedPosts.data[0]?.results?.[0]?.error_temporality,
+    listedPosts.data[0]?.results?.[0]?.provider_error,
+    listedPosts.data[0]?.results?.[0]?.retry_policy,
+  ];
+  const updatedResultContract = [
+    updatedPost.results?.[0]?.error_code,
+    updatedPost.results?.[0]?.failure_stage,
+    updatedPost.results?.[0]?.platform_error_code,
+    updatedPost.results?.[0]?.is_retriable,
+    updatedPost.results?.[0]?.next_action,
+    updatedPost.results?.[0]?.error_source,
+    updatedPost.results?.[0]?.error_temporality,
+    updatedPost.results?.[0]?.provider_error,
+    updatedPost.results?.[0]?.retry_policy,
+  ];
 
   const managedPage: InboxListResponse = await managed.list({
     isRead: false,
@@ -116,6 +190,15 @@ async function declarationConsumer(): Promise<void> {
     ProfileAccessError,
     ServiceUnavailableError,
     TimeoutError,
+    errorCode,
+    failureStage,
+    platformErrorCode,
+    isRetriable,
+    nextAction,
+    createdResultContract,
+    fetchedResultContract,
+    listedResultContract,
+    updatedResultContract,
   ];
   void (0 as unknown as ReplyResultIsExact);
   void (0 as unknown as OrdinarySyncIsExact);

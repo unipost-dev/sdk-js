@@ -68,6 +68,11 @@ export interface PlatformResult {
   external_id?: string;
   url?: string;
   error_message?: string;
+  error_code?: string;
+  failure_stage?: string;
+  platform_error_code?: string;
+  is_retriable?: boolean;
+  next_action?: string;
   error_source?: ErrorSource;
   error_temporality?: ErrorTemporality;
   provider_error?: ProviderError | null;

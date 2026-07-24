@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.6.2 candidate (2026-07-23)
+
+- Expose the stable `PlatformResult` fields `error_code`, `failure_stage`,
+  `platform_error_code`, `is_retriable`, and `next_action`
+- Preserve the complete per-platform result contract on post create, get, list,
+  and update responses, including successful, partial, and failed outcomes
+- Match the Profile-scoped Managed Users API contract for `profile_inaccessible`,
+  `managed_user_not_found`, and authentication failures without legacy fallback
+- Prepare package metadata, User-Agent, declarations, and distribution files for
+  the 0.6.2 candidate without publishing the package
+
 ## 0.6.1 (2026-07-23)
 
 - Add explicit Profile scope for Managed User list and detail operations while retaining the 0.6.0 signatures

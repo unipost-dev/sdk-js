@@ -148,7 +148,7 @@ function parseApiError(status, body, options = {}) {
 
 // src/http.ts
 var MAX_RETRIES = 2;
-var SDK_VERSION = "0.6.1";
+var SDK_VERSION = "0.6.2";
 var USER_AGENT = `@unipost/sdk/${SDK_VERSION}`;
 var HttpClient = class {
   apiKey;
