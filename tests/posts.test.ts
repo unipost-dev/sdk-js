@@ -14,6 +14,33 @@ function jsonResponse(body: unknown, status = 200) {
   };
 }
 
+const completeFailureResult = {
+  id: "result_failed",
+  social_account_id: "sa_failed",
+  platform: "twitter",
+  status: "failed",
+  error_message: "Twitter rejected the post",
+  error_code: "platform_publish_failed",
+  failure_stage: "publish",
+  platform_error_code: "187",
+  is_retriable: false,
+  next_action: "edit_content",
+  error_source: "platform",
+  error_temporality: "permanent",
+  provider_error: {
+    provider: "twitter",
+    http_status: 403,
+    code: "187",
+  },
+  retry_policy: {
+    is_retriable: false,
+    will_retry: false,
+    retry_state: "not_retriable",
+    manual_retry_allowed: false,
+    reason: "duplicate_content",
+  },
+};
+
 describe("Posts", () => {
   let client: UniPost;
 
@@ -41,6 +68,95 @@ describe("Posts", () => {
     const body = JSON.parse(init.body);
     expect(body.caption).toBe("Hello!");
     expect(body.account_ids).toEqual(["sa_1", "sa_2"]);
+  });
+
+  it("preserves a successful platform result returned by create", async () => {
+    const successfulResult = {
+      id: "result_success",
+      social_account_id: "sa_1",
+      platform: "twitter",
+      status: "published",
+      external_id: "tweet_1",
+      url: "https://x.com/example/status/tweet_1",
+    };
+    mockFetch.mockResolvedValueOnce(
+      jsonResponse({
+        data: {
+          id: "post_success",
+          caption: "Published",
+          status: "published",
+          results: [successfulResult],
+        },
+      }),
+    );
+
+    const post = await client.posts.create({ caption: "Published", accountIds: ["sa_1"] });
+
+    expect(post.results?.[0]).toEqual(successfulResult);
+  });
+
+  it("preserves the complete failure contract on a partial post returned by get", async () => {
+    mockFetch.mockResolvedValueOnce(
+      jsonResponse({
+        data: {
+          id: "post_partial",
+          caption: "Mixed outcome",
+          status: "partial",
+          results: [
+            {
+              id: "result_success",
+              social_account_id: "sa_success",
+              status: "published",
+            },
+            completeFailureResult,
+          ],
+        },
+      }),
+    );
+
+    const post = await client.posts.get("post_partial");
+
+    expect(post.status).toBe("partial");
+    expect(post.results?.[1]).toEqual(completeFailureResult);
+  });
+
+  it("preserves the complete failure contract on failed posts returned by list", async () => {
+    mockFetch.mockResolvedValueOnce(
+      jsonResponse({
+        data: [
+          {
+            id: "post_failed",
+            caption: "Failed",
+            status: "failed",
+            results: [completeFailureResult],
+          },
+        ],
+        meta: { next_cursor: "" },
+      }),
+    );
+
+    const page = await client.posts.list({ status: "failed" });
+
+    expect(page.data[0]?.status).toBe("failed");
+    expect(page.data[0]?.results?.[0]).toEqual(completeFailureResult);
+  });
+
+  it("preserves the complete failure contract on posts returned by update", async () => {
+    mockFetch.mockResolvedValueOnce(
+      jsonResponse({
+        data: {
+          id: "post_update",
+          caption: "Edited",
+          status: "partial",
+          results: [completeFailureResult],
+        },
+      }),
+    );
+
+    const post = await client.posts.update("post_update", { caption: "Edited" });
+
+    expect(post.results?.[0]).toEqual(completeFailureResult);
+    expect(mockFetch.mock.calls[0][1].method).toBe("PATCH");
   });
 
   it("creates a post with platformPosts", async () => {

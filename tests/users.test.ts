@@ -115,7 +115,7 @@ describe("Managed Users", () => {
       "/v1/profiles/prof%2Fa%20b/users?limit=100",
     );
     expect(mockFetch.mock.calls[0][1].headers["User-Agent"]).toBe(
-      "@unipost/sdk/0.6.1",
+      "@unipost/sdk/0.6.2",
     );
   });
 
@@ -285,6 +285,33 @@ describe("Managed Users", () => {
     );
   });
 
+  it("maps the API profile-inaccessible envelope without losing its stable code", async () => {
+    mockFetch.mockResolvedValueOnce(
+      jsonResponse(
+        {
+          error: {
+            code: "PROFILE_INACCESSIBLE",
+            normalized_code: "profile_inaccessible",
+            message: "Profile is unavailable",
+          },
+        },
+        404,
+      ),
+    );
+
+    await expect(
+      client.users.list({ profileId: "prof_hidden" }),
+    ).rejects.toMatchObject({
+      name: "ProfileAccessError",
+      code: "PROFILE_INACCESSIBLE",
+      status: 404,
+    });
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(mockFetch.mock.calls[0][0]).toContain(
+      "/v1/profiles/prof_hidden/users",
+    );
+  });
+
   it("distinguishes a missing managed user", async () => {
     mockFetch.mockResolvedValueOnce(
       jsonResponse(
@@ -333,6 +360,24 @@ describe("Managed Users", () => {
     await expect(
       client.users.list({ profileId: "prof_1" }),
     ).rejects.toMatchObject({ name: "AuthError", status: 401 });
+  });
+
+  it("maps the API unauthorized envelope to AuthError", async () => {
+    mockFetch.mockResolvedValueOnce(
+      jsonResponse(
+        {
+          error: {
+            code: "UNAUTHORIZED",
+            message: "Invalid API key",
+          },
+        },
+        401,
+      ),
+    );
+
+    await expect(
+      client.users.list({ profileId: "prof_1" }),
+    ).rejects.toMatchObject({ name: "AuthError", code: "auth_error", status: 401 });
   });
 
   it("keeps rate limits distinct after bounded retries", async () => {

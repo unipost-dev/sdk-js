@@ -3,15 +3,20 @@
 Official UniPost API client for JavaScript and TypeScript.
 Post to 7 social platforms with one API call.
 
-## Latest release: v0.6.1
+## Release candidate: v0.6.2
 
-Profile-scoped Managed User reads are now available without breaking existing
-0.6 integrations.
+This repository state prepares the 0.6.2 candidate; it does not indicate that
+the package has been published.
 
-- Pass `profileId` to Managed User list and detail calls for deterministic isolation.
-- Profile and external-user path segments are encoded and scoped failures never fall back to bare routes.
-- Scoped responses are validated at runtime and expose dedicated access, timeout, outage, and invalid-response errors.
-- The original `users.list()` and `users.get(externalUserId)` signatures remain available for 0.6 compatibility.
+- `PlatformResult` exposes `error_code`, `failure_stage`, `platform_error_code`,
+  `is_retriable`, and `next_action` alongside `error_source`,
+  `error_temporality`, `provider_error`, and `retry_policy`.
+- Post create, get, list, and update responses preserve the complete per-platform
+  result returned by the UniPost API for successful, partial, and failed posts.
+- Profile-scoped Managed User calls map inaccessible Profiles and missing Managed
+  Users to dedicated errors without retrying the legacy bare routes.
+- The original `users.list()` and `users.get(externalUserId)` signatures remain
+  available for 0.6 compatibility.
 
 ## Installation
 
@@ -85,6 +90,22 @@ const draft = await client.posts.create({
 
 // Publish a draft
 await client.posts.publish('post_xxx')
+
+// Inspect a stable per-platform failure contract from any Post response
+const result = post.results?.find((item) => item.status === 'failed')
+if (result) {
+  console.log({
+    code: result.error_code,
+    stage: result.failure_stage,
+    platformCode: result.platform_error_code,
+    retriable: result.is_retriable,
+    nextAction: result.next_action,
+    source: result.error_source,
+    temporality: result.error_temporality,
+    provider: result.provider_error,
+    retry: result.retry_policy,
+  })
+}
 ```
 
 ### Query Posts
@@ -426,10 +447,10 @@ import type { Post, SocialAccount, Platform, CreatePostParams } from '@unipost/s
 
 Zero production dependencies.
 
-After publishing a release, verify the registry artifact metadata with:
+After 0.6.2 is published, verify the registry artifact metadata with:
 
 ```bash
-npm view @unipost/sdk@0.6.1 dist.integrity dist.shasum --json
+npm view @unipost/sdk@0.6.2 dist.integrity dist.shasum --json
 ```
 
 ## License
