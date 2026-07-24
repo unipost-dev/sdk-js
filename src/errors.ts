@@ -51,6 +51,31 @@ export class NotFoundError extends UniPostError {
   }
 }
 
+/** A Profile is missing or is not accessible to the current API key. */
+export class ProfileAccessError extends UniPostError {
+  constructor(
+    message = "Profile is unavailable",
+    status = 404,
+    code = "profile_inaccessible",
+    contract: ErrorContract = {},
+  ) {
+    super(message, status, code, contract);
+    this.name = "ProfileAccessError";
+  }
+}
+
+/** A Managed User does not exist inside the selected Profile. */
+export class ManagedUserNotFoundError extends UniPostError {
+  constructor(
+    message = "Managed User not found",
+    code = "managed_user_not_found",
+    contract: ErrorContract = {},
+  ) {
+    super(message, 404, code, contract);
+    this.name = "ManagedUserNotFoundError";
+  }
+}
+
 /** 422 - Validation error. */
 export class ValidationError extends UniPostError {
   readonly errors: Record<string, string[]>;
@@ -97,6 +122,38 @@ export class QuotaError extends UniPostError {
   }
 }
 
+/** A successful API response did not match the SDK contract. */
+export class InvalidResponseError extends UniPostError {
+  readonly path: string;
+
+  constructor(message: string, path: string) {
+    super(message, 200, "invalid_response");
+    this.name = "InvalidResponseError";
+    this.path = path;
+  }
+}
+
+/** The request exceeded the configured SDK timeout. */
+export class TimeoutError extends UniPostError {
+  constructor(message = "UniPost request timed out") {
+    super(message, 0, "timeout");
+    this.name = "TimeoutError";
+  }
+}
+
+/** UniPost could not be reached or returned a gateway/service outage response. */
+export class ServiceUnavailableError extends UniPostError {
+  constructor(
+    message = "UniPost is unavailable",
+    status = 0,
+    code = "service_unavailable",
+    contract: ErrorContract = {},
+  ) {
+    super(message, status, code, contract);
+    this.name = "ServiceUnavailableError";
+  }
+}
+
 interface ApiErrorBody {
   error?: {
     code?: string;
@@ -118,9 +175,15 @@ interface ApiErrorBody {
 export function parseApiError(
   status: number,
   body: ApiErrorBody,
-  options: { preserveCode?: boolean } = {},
+  options: {
+    preserveCode?: boolean;
+    context?: "managed_users";
+  } = {},
 ): UniPostError {
   const msg = body?.error?.message || "Unknown API error";
+  const classificationCode = (
+    body?.error?.normalized_code || body?.error?.code || "unknown"
+  ).toLowerCase();
   const code = options.preserveCode
     ? body?.error?.code || body?.error?.normalized_code || "unknown"
     : body?.error?.normalized_code || body?.error?.code || "unknown";
@@ -130,6 +193,23 @@ export function parseApiError(
     provider_error: body?.error?.provider_error,
     retry_policy: body?.error?.retry_policy,
   };
+
+  if (
+    options.context === "managed_users" &&
+    (status === 403 || status === 404) &&
+    ["profile_inaccessible", "profile_not_found", "profile_access_denied"].includes(
+      classificationCode,
+    )
+  ) {
+    return new ProfileAccessError(msg, status, code, contract);
+  }
+  if (
+    options.context === "managed_users" &&
+    status === 404 &&
+    ["managed_user_not_found", "user_not_found"].includes(classificationCode)
+  ) {
+    return new ManagedUserNotFoundError(msg, code, contract);
+  }
 
   switch (status) {
     case 401:
@@ -148,10 +228,13 @@ export function parseApiError(
       return new RateLimitError(retryAfter, msg, contract);
     }
     case 403:
-      if (code === "quota_exceeded") return new QuotaError(msg, contract);
+      if (classificationCode === "quota_exceeded") return new QuotaError(msg, contract);
       return new UniPostError(msg, status, code, contract);
     case 502:
       if (body?.error?.platform) return new PlatformError(msg, body.error.platform, contract);
+      return new UniPostError(msg, status, code, contract);
+    case 503:
+    case 504:
       return new UniPostError(msg, status, code, contract);
     default:
       return new UniPostError(msg, status, code, contract);

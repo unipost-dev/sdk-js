@@ -1,6 +1,6 @@
 {
   "name": "@unipost/sdk",
-  "version": "0.7.0",
+  "version": "0.6.1",
   "description": "Official UniPost API client for JavaScript and TypeScript",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
@@ -26,7 +26,7 @@
     "typecheck:tests": "tsc -p tsconfig.tests.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run typecheck && npm test && npm run build"
   },
   "keywords": [
     "unipost",

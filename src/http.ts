@@ -2,7 +2,7 @@ import { parseApiError, RateLimitError } from "./errors.js";
 import type { InboxWebSocketConnectionDetails } from "./types/inbox.js";
 
 const MAX_RETRIES = 2;
-const SDK_VERSION = "0.7.0";
+const SDK_VERSION = "0.6.1";
 const USER_AGENT = `@unipost/sdk/${SDK_VERSION}`;
 
 export interface HttpClientOptions {
@@ -23,6 +23,7 @@ interface HttpRequestOptions {
   headers?: Record<string, string>;
   retryRateLimits?: boolean;
   preserveErrorCode?: boolean;
+  errorContext?: "managed_users";
   redirect?: RequestInit["redirect"];
 }
 
@@ -124,6 +125,7 @@ export class HttpClient {
         const body = (await response.json().catch(() => ({}))) as Parameters<typeof parseApiError>[1];
         throw parseApiError(response.status, body, {
           preserveCode: options?.preserveErrorCode,
+          context: options?.errorContext,
         });
       } catch (err) {
         if (retryRateLimits && err instanceof RateLimitError && attempt < MAX_RETRIES) {

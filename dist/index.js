@@ -31,10 +31,15 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 var index_exports = {};
 __export(index_exports, {
   AuthError: () => AuthError,
+  InvalidResponseError: () => InvalidResponseError,
+  ManagedUserNotFoundError: () => ManagedUserNotFoundError,
   NotFoundError: () => NotFoundError,
   PlatformError: () => PlatformError,
+  ProfileAccessError: () => ProfileAccessError,
   QuotaError: () => QuotaError,
   RateLimitError: () => RateLimitError,
+  ServiceUnavailableError: () => ServiceUnavailableError,
+  TimeoutError: () => TimeoutError,
   UniPost: () => UniPost,
   UniPostError: () => UniPostError,
   ValidationError: () => ValidationError,
@@ -73,6 +78,18 @@ var NotFoundError = class extends UniPostError {
     this.name = "NotFoundError";
   }
 };
+var ProfileAccessError = class extends UniPostError {
+  constructor(message = "Profile is unavailable", status = 404, code = "profile_inaccessible", contract = {}) {
+    super(message, status, code, contract);
+    this.name = "ProfileAccessError";
+  }
+};
+var ManagedUserNotFoundError = class extends UniPostError {
+  constructor(message = "Managed User not found", code = "managed_user_not_found", contract = {}) {
+    super(message, 404, code, contract);
+    this.name = "ManagedUserNotFoundError";
+  }
+};
 var ValidationError = class extends UniPostError {
   errors;
   constructor(message = "Validation failed", errors = {}, contract = {}, code = "validation_error") {
@@ -103,8 +120,29 @@ var QuotaError = class extends UniPostError {
     this.name = "QuotaError";
   }
 };
+var InvalidResponseError = class extends UniPostError {
+  path;
+  constructor(message, path) {
+    super(message, 200, "invalid_response");
+    this.name = "InvalidResponseError";
+    this.path = path;
+  }
+};
+var TimeoutError = class extends UniPostError {
+  constructor(message = "UniPost request timed out") {
+    super(message, 0, "timeout");
+    this.name = "TimeoutError";
+  }
+};
+var ServiceUnavailableError = class extends UniPostError {
+  constructor(message = "UniPost is unavailable", status = 0, code = "service_unavailable", contract = {}) {
+    super(message, status, code, contract);
+    this.name = "ServiceUnavailableError";
+  }
+};
 function parseApiError(status, body, options = {}) {
   const msg = body?.error?.message || "Unknown API error";
+  const classificationCode = (body?.error?.normalized_code || body?.error?.code || "unknown").toLowerCase();
   const code = options.preserveCode ? body?.error?.code || body?.error?.normalized_code || "unknown" : body?.error?.normalized_code || body?.error?.code || "unknown";
   const contract = {
     error_source: body?.error?.error_source,
@@ -112,6 +150,14 @@ function parseApiError(status, body, options = {}) {
     provider_error: body?.error?.provider_error,
     retry_policy: body?.error?.retry_policy
   };
+  if (options.context === "managed_users" && (status === 403 || status === 404) && ["profile_inaccessible", "profile_not_found", "profile_access_denied"].includes(
+    classificationCode
+  )) {
+    return new ProfileAccessError(msg, status, code, contract);
+  }
+  if (options.context === "managed_users" && status === 404 && ["managed_user_not_found", "user_not_found"].includes(classificationCode)) {
+    return new ManagedUserNotFoundError(msg, code, contract);
+  }
   switch (status) {
     case 401:
       return new AuthError(msg, contract);
@@ -129,10 +175,13 @@ function parseApiError(status, body, options = {}) {
       return new RateLimitError(retryAfter, msg, contract);
     }
     case 403:
-      if (code === "quota_exceeded") return new QuotaError(msg, contract);
+      if (classificationCode === "quota_exceeded") return new QuotaError(msg, contract);
       return new UniPostError(msg, status, code, contract);
     case 502:
       if (body?.error?.platform) return new PlatformError(msg, body.error.platform, contract);
+      return new UniPostError(msg, status, code, contract);
+    case 503:
+    case 504:
       return new UniPostError(msg, status, code, contract);
     default:
       return new UniPostError(msg, status, code, contract);
@@ -141,7 +190,7 @@ function parseApiError(status, body, options = {}) {
 
 // src/http.ts
 var MAX_RETRIES = 2;
-var SDK_VERSION = "0.7.0";
+var SDK_VERSION = "0.6.1";
 var USER_AGENT = `@unipost/sdk/${SDK_VERSION}`;
 var HttpClient = class {
   apiKey;
@@ -213,7 +262,8 @@ var HttpClient = class {
         }
         const body = await response.json().catch(() => ({}));
         throw parseApiError(response.status, body, {
-          preserveCode: options?.preserveErrorCode
+          preserveCode: options?.preserveErrorCode,
+          context: options?.errorContext
         });
       } catch (err) {
         if (retryRateLimits && err instanceof RateLimitError && attempt < MAX_RETRIES) {
@@ -1027,23 +1077,212 @@ var Users = class {
     this.http = http;
   }
   http;
-  /** List managed users inside a profile. */
   async list(params) {
-    const profileId = encodeURIComponent(params.profileId);
-    return this.http.get(`/v1/profiles/${profileId}/users`, {
-      limit: params.limit
-    });
-  }
-  /** Get one managed user inside a profile by external_user_id. */
-  async get(params) {
-    const profileId = encodeURIComponent(params.profileId);
-    const externalUserId = encodeURIComponent(params.externalUserId);
-    const res = await this.http.get(
-      `/v1/profiles/${profileId}/users/${externalUserId}`
+    if (params === void 0) {
+      return this.http.get("/v1/users");
+    }
+    const profileId = encodePathSegment(params.profileId, "profileId");
+    validateLimit(params.limit);
+    const response = await requestManagedUserResponse(
+      () => this.http.request(
+        "GET",
+        `/v1/profiles/${profileId}/users`,
+        {
+          query: { limit: params.limit },
+          preserveErrorCode: true,
+          errorContext: "managed_users"
+        }
+      )
     );
-    return res.data;
+    return parseManagedUserPage(response);
+  }
+  async get(params) {
+    if (typeof params === "string") {
+      const res2 = await this.http.get(
+        `/v1/users/${encodeURIComponent(params)}`
+      );
+      return res2.data;
+    }
+    const profileId = encodePathSegment(params.profileId, "profileId");
+    const externalUserId = encodePathSegment(params.externalUserId, "externalUserId");
+    const res = await requestManagedUserResponse(
+      () => this.http.request(
+        "GET",
+        `/v1/profiles/${profileId}/users/${externalUserId}`,
+        {
+          preserveErrorCode: true,
+          errorContext: "managed_users"
+        }
+      )
+    );
+    return parseManagedUserDetailEnvelope(res);
   }
 };
+function encodePathSegment(value, field) {
+  if (typeof value !== "string" || value.trim() === "") {
+    throw new ValidationError(`${field} is required`, {
+      [field]: ["Must be a non-empty string"]
+    });
+  }
+  try {
+    return encodeURIComponent(value);
+  } catch {
+    throw new ValidationError(`${field} is invalid`, {
+      [field]: ["Must be valid Unicode text"]
+    });
+  }
+}
+function validateLimit(limit) {
+  if (limit !== void 0 && (!Number.isInteger(limit) || limit < 1 || limit > 100)) {
+    throw new ValidationError("limit must be an integer between 1 and 100", {
+      limit: ["Must be an integer between 1 and 100"]
+    });
+  }
+}
+function parseManagedUserPage(value) {
+  const page = requireRecord(value, "response");
+  if (!Array.isArray(page.data)) {
+    invalid("response.data", "an array");
+  }
+  const data = page.data.map(
+    (item, index) => parseManagedUserSummary(item, `response.data[${index}]`)
+  );
+  validateOptionalString(page, "nextCursor", "response");
+  if (page.meta !== void 0) {
+    const meta = requireRecord(page.meta, "response.meta");
+    validateOptionalNumber(meta, "total", "response.meta");
+    validateOptionalNumber(meta, "limit", "response.meta");
+    validateOptionalBoolean(meta, "has_more", "response.meta");
+    validateOptionalString(meta, "next_cursor", "response.meta");
+  }
+  return value;
+}
+function parseManagedUserSummary(value, path) {
+  const user = requireRecord(value, path);
+  requireString(user.external_user_id, `${path}.external_user_id`);
+  validateOptionalString(user, "external_user_email", path);
+  requireCount(user.account_count, `${path}.account_count`);
+  requireCount(user.reconnect_count, `${path}.reconnect_count`);
+  requireCount(user.disconnected_count, `${path}.disconnected_count`);
+  requireString(user.first_connected_at, `${path}.first_connected_at`);
+  validateOptionalString(user, "last_refreshed_at", path);
+  const platformCounts = requireRecord(user.platform_counts, `${path}.platform_counts`);
+  for (const [platform, count] of Object.entries(platformCounts)) {
+    requireCount(count, `${path}.platform_counts.${platform}`);
+  }
+  return value;
+}
+function parseManagedUserDetailEnvelope(value) {
+  const envelope = requireRecord(value, "response");
+  return parseManagedUserDetail(envelope.data, "response.data");
+}
+function parseManagedUserDetail(value, path) {
+  const user = requireRecord(value, path);
+  requireString(user.external_user_id, `${path}.external_user_id`);
+  validateOptionalString(user, "external_user_email", path);
+  requireCount(user.account_count, `${path}.account_count`);
+  if (!Array.isArray(user.accounts)) {
+    invalid(`${path}.accounts`, "an array");
+  }
+  user.accounts.forEach(
+    (account, index) => parseManagedUserAccount(account, `${path}.accounts[${index}]`)
+  );
+  return value;
+}
+function parseManagedUserAccount(value, path) {
+  const account = requireRecord(value, path);
+  requireString(account.id, `${path}.id`);
+  requireString(account.profile_id, `${path}.profile_id`);
+  requireString(account.platform, `${path}.platform`);
+  requireString(account.status, `${path}.status`);
+  validateOptionalString(account, "profile_name", path);
+  validateOptionalNullableString(account, "account_name", path);
+  validateOptionalString(account, "external_account_id", path);
+  validateOptionalString(account, "connected_at", path);
+  validateOptionalString(account, "connection_type", path);
+  validateOptionalString(account, "external_user_id", path);
+  validateOptionalString(account, "external_user_email", path);
+  if (account.scope !== void 0 && (!Array.isArray(account.scope) || account.scope.some((scope) => typeof scope !== "string"))) {
+    invalid(`${path}.scope`, "an array of strings");
+  }
+  return value;
+}
+function requireRecord(value, path) {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    invalid(path, "an object");
+  }
+  return value;
+}
+function requireString(value, path) {
+  if (typeof value !== "string") {
+    invalid(path, "a string");
+  }
+  return value;
+}
+function requireCount(value, path) {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 0) {
+    invalid(path, "a non-negative integer");
+  }
+  return value;
+}
+function validateOptionalString(value, key, path) {
+  if (value[key] !== void 0) {
+    requireString(value[key], `${path}.${key}`);
+  }
+}
+function validateOptionalNullableString(value, key, path) {
+  if (value[key] !== void 0 && value[key] !== null) {
+    requireString(value[key], `${path}.${key}`);
+  }
+}
+function validateOptionalNumber(value, key, path) {
+  if (value[key] !== void 0 && typeof value[key] !== "number") {
+    invalid(`${path}.${key}`, "a number");
+  }
+}
+function validateOptionalBoolean(value, key, path) {
+  if (value[key] !== void 0 && typeof value[key] !== "boolean") {
+    invalid(`${path}.${key}`, "a boolean");
+  }
+}
+function invalid(path, expected) {
+  throw new InvalidResponseError(
+    `Invalid UniPost response at ${path}: expected ${expected}`,
+    path
+  );
+}
+async function requestManagedUserResponse(request) {
+  try {
+    return await request();
+  } catch (error) {
+    if (error instanceof SyntaxError) {
+      throw new InvalidResponseError(
+        "UniPost returned invalid JSON for a Managed User response",
+        "response"
+      );
+    }
+    if (error instanceof DOMException && (error.name === "TimeoutError" || error.name === "AbortError")) {
+      throw new TimeoutError();
+    }
+    if (error instanceof TypeError) {
+      throw new ServiceUnavailableError();
+    }
+    if (error instanceof UniPostError && [502, 503, 504].includes(error.status) && !(error instanceof ServiceUnavailableError)) {
+      throw new ServiceUnavailableError(
+        error.message,
+        error.status,
+        error.code,
+        {
+          error_source: error.error_source,
+          error_temporality: error.error_temporality,
+          provider_error: error.provider_error,
+          retry_policy: error.retry_policy
+        }
+      );
+    }
+    throw error;
+  }
+}
 
 // src/resources/webhooks.ts
 var Webhooks = class {
@@ -1461,10 +1700,15 @@ function timingSafeEqual(a, b) {
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
   AuthError,
+  InvalidResponseError,
+  ManagedUserNotFoundError,
   NotFoundError,
   PlatformError,
+  ProfileAccessError,
   QuotaError,
   RateLimitError,
+  ServiceUnavailableError,
+  TimeoutError,
   UniPost,
   UniPostError,
   ValidationError,
